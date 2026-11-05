@@ -114,6 +114,7 @@ impl DeviceFingerprint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SupportedDeviceType {
     NovationBassStation2,
+    NovationPeak,
     BehringerTd3,
     BehringerTd3Mo,
     BehringerTd3Md,
@@ -135,6 +136,9 @@ impl SupportedDeviceType {
         // Check vendor and product ID signatures first
         if v == "1235" && (p == "0018" || p == "18") {
             return Self::NovationBassStation2;
+        }
+        if v == "1235" && (p == "007e" || p == "7e") {
+            return Self::NovationPeak;
         }
         if v == "1397" && (p == "00b2" || p == "b2") {
             if card_lower.contains("td-3-md") || card_lower.contains("td3md") {
@@ -164,6 +168,8 @@ impl SupportedDeviceType {
         // Secondary fallback checking card and client name strings
         if card_lower.contains("nord drum") || card_lower.contains("norddrum") {
             Self::ClaviaNordDrum2
+        } else if card_lower.contains("peak") {
+            Self::NovationPeak
         } else if card_lower.contains("bass station") || card_lower.contains("bassstation") {
             Self::NovationBassStation2
         } else if card_lower.contains("td-3-mo") || card_lower.contains("td3mo") {
@@ -189,6 +195,7 @@ impl SupportedDeviceType {
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::NovationBassStation2 => "Novation Bass Station II",
+            Self::NovationPeak => "Focusrite-Novation Peak",
             Self::BehringerTd3 => "Behringer TD-3",
             Self::BehringerTd3Mo => "Behringer TD-3-MO",
             Self::BehringerTd3Md => "Behringer TD-3-MD",
@@ -206,6 +213,7 @@ impl SupportedDeviceType {
         matches!(
             self,
             Self::NovationBassStation2
+                | Self::NovationPeak
                 | Self::BehringerTd3
                 | Self::BehringerTd3Mo
                 | Self::BehringerTd3Md
@@ -1284,6 +1292,15 @@ mod tests {
         assert_eq!(
             SupportedDeviceType::from_vendor_product("0000", "0000", "Clavia Nord Drum 2"),
             SupportedDeviceType::ClaviaNordDrum2
+        );
+        assert_eq!(
+            SupportedDeviceType::from_vendor_product("1235", "007e", "Peak"),
+            SupportedDeviceType::NovationPeak
+        );
+        assert!(SupportedDeviceType::NovationPeak.is_synthesizer());
+        assert_eq!(
+            SupportedDeviceType::NovationPeak.display_name(),
+            "Focusrite-Novation Peak"
         );
     }
 

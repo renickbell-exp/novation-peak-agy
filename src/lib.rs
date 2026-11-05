@@ -3,6 +3,7 @@
 //! patch librarian, Korg nanoKONTROL2 controller surface, and Konduktiva live-coding
 //! companion for the Novation Peak 8-voice polyphonic hybrid synthesizer.
 
+pub mod midi;
 pub mod params;
 pub mod sysex;
 

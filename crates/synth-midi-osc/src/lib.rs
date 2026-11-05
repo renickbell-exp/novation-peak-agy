@@ -23,15 +23,18 @@ pub use osc::{
     OscBridge, OscBroadcaster, OscConfig, OscError, OscIncomingMessage, OscServer,
 };
 
-// Re-export Nord Drum 2 routing, ALSA discovery, and Anti-Choke scheduling
+// Re-export Nord Drum 2 and Novation Peak routing, ALSA discovery, and Anti-Choke scheduling
 pub use routing::{
     discover_nord_drum_hardware, discover_nord_drum_hardware_with_roots,
-    dual_midi_router_json_schema, export_midi_osc_schemas, validate_dual_midi_router_json,
-    AlsaPortEndpoint, AntiChokeScheduler, DualMidiRouter, MidiControlMode,
-    MidiPacket, MidiSafetyMode, NordDrumDiscoveryResult, SchedulerMetrics,
+    discover_peak_hardware, discover_peak_hardware_with_roots,
+    dual_midi_router_json_schema, export_midi_osc_schemas, peak_midi_router_json_schema,
+    validate_dual_midi_router_json, validate_peak_midi_router_json, AlsaPortEndpoint,
+    AntiChokeScheduler, DualMidiRouter, MidiControlMode, MidiPacket, MidiSafetyMode,
+    NordDrumDiscoveryResult, PeakDiscoveryResult, PeakMidiRouter, SchedulerMetrics,
     DEFAULT_CC_THROTTLE_MS, DEFAULT_GLOBAL_CHANNEL, DEFAULT_TRIGGER_NOTES,
     GLOBAL_FOCUS_CC, NANOKONTROL2_ALSA_DEVICE, NORD_DRUM_2_MODEL_ID,
-    UMC1820_ALSA_DEVICE, VOICE_COUNT,
+    PEAK_ALSA_DEVICE, PEAK_DEFAULT_CHANNEL, PEAK_POLYPHONY, PEAK_SEQ_CLIENT,
+    PEAK_USB_PRODUCT, PEAK_USB_VENDOR, UMC1820_ALSA_DEVICE, VOICE_COUNT,
 };
 
 #[cfg(test)]
@@ -138,10 +141,12 @@ mod tests {
 
         assert!(temp_dir.join("stored-device-profile.schema.json").exists());
         assert!(temp_dir.join("dual-midi-router.schema.json").exists());
+        assert!(temp_dir.join("peak-midi-router.schema.json").exists());
         assert!(temp_dir.join("asm-hydrasynth.hardware.json").exists());
         assert!(temp_dir.join("korg-nanokontrol2.hardware.json").exists());
         assert!(temp_dir.join("novation-bs2.hardware.json").exists());
         assert!(temp_dir.join("clavia-nord-drum-2.hardware.json").exists());
+        assert!(temp_dir.join("novation-peak.hardware.json").exists());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

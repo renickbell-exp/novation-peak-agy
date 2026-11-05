@@ -45,6 +45,24 @@ pub const UMC1820_ALSA_DEVICE: &str = "hw:0,0,0";
 /// Default ALSA RawMIDI device path for the Korg nanoKONTROL2 control surface.
 pub const NANOKONTROL2_ALSA_DEVICE: &str = "hw:2,0,0";
 
+/// Default ALSA RawMIDI device path for the Focusrite-Novation Peak USB MIDI 1 interface.
+pub const PEAK_ALSA_DEVICE: &str = "hw:3,0,0";
+
+/// Focusrite-Novation USB Vendor ID (`1235`).
+pub const PEAK_USB_VENDOR: &str = "1235";
+
+/// Novation Peak USB Product ID (`007e`).
+pub const PEAK_USB_PRODUCT: &str = "007e";
+
+/// Default ALSA Sequencer client ID for the Novation Peak (`28`).
+pub const PEAK_SEQ_CLIENT: u32 = 28;
+
+/// Default 1-based MIDI Receive Channel for the Novation Peak (`1`).
+pub const PEAK_DEFAULT_CHANNEL: u8 = 1;
+
+/// Maximum polyphonic voice count on the Novation Peak (`8` voices).
+pub const PEAK_POLYPHONY: usize = 8;
+
 /// Default hardware anti-choke rate thinning interval per (voice, CC) pair in milliseconds.
 pub const DEFAULT_CC_THROTTLE_MS: u64 = 2;
 
@@ -112,6 +130,8 @@ pub enum MidiControlMode {
 pub enum MidiPacket {
     /// Control Change message: `[0xBn | channel, cc, value]`. Channel is 0-indexed [0..15].
     ControlChange { channel: u8, cc: u8, value: u8 },
+    /// Program Change message: `[0xCn | channel, program]`. Channel is 0-indexed [0..15].
+    ProgramChange { channel: u8, program: u8 },
     /// Note On trigger message: `[0x9n | channel, note, velocity]`. Channel is 0-indexed [0..15].
     NoteOn { channel: u8, note: u8, velocity: u8 },
     /// Note Off trigger message: `[0x8n | channel, note, velocity]`. Channel is 0-indexed [0..15].
@@ -127,6 +147,9 @@ impl MidiPacket {
         match self {
             Self::ControlChange { channel, cc, value } => {
                 vec![0xB0 | (channel & 0x0F), cc & 0x7F, value & 0x7F]
+            }
+            Self::ProgramChange { channel, program } => {
+                vec![0xC0 | (channel & 0x0F), program & 0x7F]
             }
             Self::NoteOn { channel, note, velocity } => {
                 vec![0x90 | (channel & 0x0F), note & 0x7F, velocity & 0x7F]
@@ -476,7 +499,284 @@ pub fn export_midi_osc_schemas(dir: &std::path::Path) -> Result<(), std::io::Err
     if let Ok(json) = serde_json::to_string_pretty(&nd2_router) {
         let _ = std::fs::write(dir.join("clavia-nord-drum-2.hardware.json"), json);
     }
+    // 5. Novation Peak USB & router config
+    if let Ok(json) = serde_json::to_string_pretty(&peak_midi_router_json_schema()) {
+        let _ = std::fs::write(dir.join("peak-midi-router.schema.json"), json);
+    }
+    let peak_hw = crate::hardware::StoredDeviceProfile {
+        identity_key: "novation_peak_usb".to_string(),
+        vendor_id: PEAK_USB_VENDOR.to_string(),
+        product_id: PEAK_USB_PRODUCT.to_string(),
+        serial: Some("PEAK-001".to_string()),
+        card_name: "Peak".to_string(),
+        device_type: crate::hardware::SupportedDeviceType::NovationPeak,
+        custom_alias: Some("Focusrite-Novation Peak 8-Voice Hybrid".to_string()),
+        last_known_card_index: Some(3),
+        last_known_seq_address: Some((PEAK_SEQ_CLIENT, 0)),
+        last_known_usb_path: Some("1-1.5:1.0".to_string()),
+        reconnect_count: 1,
+        is_active: false,
+    };
+    if let Ok(json) = serde_json::to_string_pretty(&peak_hw) {
+        let _ = std::fs::write(dir.join("novation-peak.hardware.json"), json);
+    }
     Ok(())
+}
+
+// =============================================================================
+// Novation Peak 8-Voice Polyphonic MIDI Router
+// =============================================================================
+
+/// Polyphonic 8-voice MIDI router for the Focusrite-Novation Peak (`1235:007e`, `hw:3,0,0`).
+///
+/// Supports single-channel polyphonic routing (default Channel 1), automatic acoustic
+/// safe-sweep clamping (`synth_core::safe_sweep_range`), optional +32 dual-CC pair emission,
+/// Animate 1 & 2 performance holds (`CC 114` / `CC 115`), Bank Select + Program Change
+/// (`CC 0` / `CC 32` / `PC`), 8-voice allocation with oldest-voice stealing, and full panic.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeakMidiRouter {
+    /// 1-based MIDI channel (`1..=16`, factory default `1`).
+    pub midi_channel: u8,
+    /// Operational hardware safety mode (default `VirtualLoopback`).
+    pub safety_mode: MidiSafetyMode,
+    /// When `true`, clamps continuous CC sweeps using `synth_core::safe_sweep_range(param_name)`.
+    pub enforce_safe_sweep: bool,
+    /// When `true`, also emits the paired +32 CC for Peak dual-CC parameters (`23/55`, `24/56`, `25/57`, `29/61`, `30/62`, `31/63`).
+    pub emit_dual_cc_pairs: bool,
+    /// Active held MIDI note numbers (`0..=127`), capped at `PEAK_POLYPHONY` (8 voices).
+    pub active_voices: Vec<u8>,
+    /// Current state of Animate 1 Hold (`CC 114`).
+    pub animate_1_held: bool,
+    /// Current state of Animate 2 Hold (`CC 115`).
+    pub animate_2_held: bool,
+}
+
+impl Default for PeakMidiRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PeakMidiRouter {
+    /// Creates a new Novation Peak router in safe `VirtualLoopback` mode on MIDI Channel 1.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            midi_channel: PEAK_DEFAULT_CHANNEL,
+            safety_mode: MidiSafetyMode::VirtualLoopback,
+            enforce_safe_sweep: true,
+            emit_dual_cc_pairs: false,
+            active_voices: Vec::with_capacity(PEAK_POLYPHONY),
+            animate_1_held: false,
+            animate_2_held: false,
+        }
+    }
+
+    /// Builder method setting the 1-based MIDI channel (`1..=16`).
+    #[must_use]
+    pub fn with_midi_channel(mut self, channel: u8) -> Self {
+        self.midi_channel = channel.clamp(1, 16);
+        self
+    }
+
+    /// Builder method setting the operational safety mode.
+    #[must_use]
+    pub fn with_safety_mode(mut self, mode: MidiSafetyMode) -> Self {
+        self.safety_mode = mode;
+        self
+    }
+
+    /// Builder method enabling or disabling safe-sweep clamping.
+    #[must_use]
+    pub fn with_safe_sweep(mut self, enforce: bool) -> Self {
+        self.enforce_safe_sweep = enforce;
+        self
+    }
+
+    /// Builder method enabling or disabling +32 dual-CC pair emission.
+    #[must_use]
+    pub fn with_dual_cc_pairs(mut self, enable: bool) -> Self {
+        self.emit_dual_cc_pairs = enable;
+        self
+    }
+
+    /// Returns the 0-indexed wire MIDI channel (`0..=15`).
+    #[must_use]
+    pub const fn wire_channel(&self) -> u8 {
+        self.midi_channel.saturating_sub(1) & 0x0F
+    }
+
+    /// Routes a parameter CC, applying `synth_core::safe_sweep_range(param_name)` if `enforce_safe_sweep` is true,
+    /// and appending the paired +32 CC if `emit_dual_cc_pairs` is true.
+    pub fn route_cc(&self, cc: u8, param_name: &str, value: u8) -> Vec<MidiPacket> {
+        let clamped_val = if self.enforce_safe_sweep {
+            synth_core::safe_sweep_range(param_name).clamp(value)
+        } else {
+            value & 0x7F
+        };
+
+        let ch = self.wire_channel();
+        let mut out = vec![MidiPacket::ControlChange {
+            channel: ch,
+            cc: cc & 0x7F,
+            value: clamped_val,
+        }];
+
+        if self.emit_dual_cc_pairs {
+            if let Some(partner_cc) = match cc {
+                23 => Some(55),
+                24 => Some(56),
+                25 => Some(57),
+                29 => Some(61),
+                30 => Some(62),
+                31 => Some(63),
+                _ => None,
+            } {
+                out.push(MidiPacket::ControlChange {
+                    channel: ch,
+                    cc: partner_cc,
+                    value: clamped_val,
+                });
+            }
+        }
+
+        out
+    }
+
+    /// Routes a Note-On event, performing 8-voice polyphonic voice allocation (emitting a Note-Off
+    /// for the oldest active voice if all 8 voices are already occupied).
+    pub fn route_note_on(&mut self, note: u8, velocity: u8) -> Vec<MidiPacket> {
+        let n = note & 0x7F;
+        let vel = velocity.clamp(1, 127);
+        let ch = self.wire_channel();
+        let mut packets = Vec::with_capacity(2);
+
+        if let Some(pos) = self.active_voices.iter().position(|&active| active == n) {
+            self.active_voices.remove(pos);
+        } else if self.active_voices.len() >= PEAK_POLYPHONY {
+            let stolen = self.active_voices.remove(0);
+            packets.push(MidiPacket::NoteOff {
+                channel: ch,
+                note: stolen,
+                velocity: 0,
+            });
+        }
+
+        self.active_voices.push(n);
+        packets.push(MidiPacket::NoteOn {
+            channel: ch,
+            note: n,
+            velocity: vel,
+        });
+        packets
+    }
+
+    /// Routes a Note-Off event and releases the voice from `active_voices`.
+    pub fn route_note_off(&mut self, note: u8, velocity: u8) -> MidiPacket {
+        let n = note & 0x7F;
+        if let Some(pos) = self.active_voices.iter().position(|&active| active == n) {
+            self.active_voices.remove(pos);
+        }
+        MidiPacket::NoteOff {
+            channel: self.wire_channel(),
+            note: n,
+            velocity: velocity & 0x7F,
+        }
+    }
+
+    /// Routes an Animate 1 (`index = 1`, `CC 114`) or Animate 2 (`index = 2`, `CC 115`) performance hold toggle.
+    pub fn route_animate_hold(&mut self, index: u8, held: bool) -> Option<MidiPacket> {
+        let cc = match index {
+            1 => {
+                self.animate_1_held = held;
+                114
+            }
+            2 => {
+                self.animate_2_held = held;
+                115
+            }
+            _ => return None,
+        };
+        Some(MidiPacket::ControlChange {
+            channel: self.wire_channel(),
+            cc,
+            value: if held { 127 } else { 0 },
+        })
+    }
+
+    /// Routes a Bank Select (`CC 0 = 0`, `CC 32 = bank_lsb`) + Program Change (`0..=127`) sequence.
+    pub fn route_bank_program(&self, bank_lsb: u8, program: u8) -> Vec<MidiPacket> {
+        let ch = self.wire_channel();
+        vec![
+            MidiPacket::ControlChange {
+                channel: ch,
+                cc: 0,
+                value: 0,
+            },
+            MidiPacket::ControlChange {
+                channel: ch,
+                cc: 32,
+                value: bank_lsb.clamp(1, 4),
+            },
+            MidiPacket::ProgramChange {
+                channel: ch,
+                program: program & 0x7F,
+            },
+        ]
+    }
+
+    /// Emits a full Peak panic sequence matching `silencePeak()` in `js/konduktiva-peak/src/midi.js`:
+    /// `CC 120 = 0` (All Sound Off), `CC 123 = 0` (All Notes Off), and explicit `NoteOff` on all 128 notes (`0..=127`).
+    pub fn route_panic(&mut self) -> Vec<MidiPacket> {
+        self.active_voices.clear();
+        self.animate_1_held = false;
+        self.animate_2_held = false;
+        let ch = self.wire_channel();
+        let mut packets = Vec::with_capacity(130);
+        packets.push(MidiPacket::ControlChange {
+            channel: ch,
+            cc: 120,
+            value: 0,
+        });
+        packets.push(MidiPacket::ControlChange {
+            channel: ch,
+            cc: 123,
+            value: 0,
+        });
+        for note in 0..=127u8 {
+            packets.push(MidiPacket::NoteOff {
+                channel: ch,
+                note,
+                velocity: 0,
+            });
+        }
+        packets
+    }
+}
+
+/// Generates the standard JSON Schema (Draft-07) for `PeakMidiRouter`.
+pub fn peak_midi_router_json_schema() -> serde_json::Value {
+    serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "PeakMidiRouter",
+        "description": "Novation Peak 8-voice polyphonic MIDI router and safety configuration",
+        "type": "object",
+        "required": ["midi_channel", "safety_mode", "enforce_safe_sweep", "emit_dual_cc_pairs"],
+        "properties": {
+            "midi_channel": { "type": "integer", "minimum": 1, "maximum": 16, "default": 1 },
+            "safety_mode": { "type": "string", "enum": ["VirtualLoopback", "DryRun", "LiveHardwareArmed"] },
+            "enforce_safe_sweep": { "type": "boolean", "default": true },
+            "emit_dual_cc_pairs": { "type": "boolean", "default": false }
+        }
+    })
+}
+
+/// Validates and parses JSON into a `PeakMidiRouter`.
+pub fn validate_peak_midi_router_json(
+    json_str: &str,
+) -> Result<PeakMidiRouter, synth_core::SynthError> {
+    serde_json::from_str(json_str)
+        .map_err(|e| synth_core::SynthError::SerializationError(e.to_string()))
 }
 
 // =============================================================================
@@ -823,6 +1123,130 @@ pub fn discover_nord_drum_hardware_with_roots(
     }
 }
 
+/// Consolidated ALSA hardware discovery result for the Novation Peak workstation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeakDiscoveryResult {
+    pub peak: Option<AlsaPortEndpoint>,
+    pub umc1820: Option<AlsaPortEndpoint>,
+    pub nanokontrol2: Option<AlsaPortEndpoint>,
+    pub total_devices_scanned: usize,
+    pub safety_mode: MidiSafetyMode,
+}
+
+impl PeakDiscoveryResult {
+    /// Returns `true` if the Novation Peak USB MIDI endpoint (`hw:3,0,0` or simulated mock) is available.
+    #[must_use]
+    pub const fn has_peak_usb(&self) -> bool {
+        self.peak.is_some()
+    }
+
+    /// Returns `true` if the UMC1820 5-pin DIN MIDI interface (`hw:0,0,0` or simulated mock) is available.
+    #[must_use]
+    pub const fn has_umc1820_din(&self) -> bool {
+        self.umc1820.is_some()
+    }
+
+    /// Returns `true` if the Korg nanoKONTROL2 surface (`hw:2,0,0` or simulated mock) is available.
+    #[must_use]
+    pub const fn has_controller(&self) -> bool {
+        self.nanokontrol2.is_some()
+    }
+}
+
+/// Performs non-invasive ALSA port discovery for the Novation Peak workstation.
+///
+/// In `VirtualLoopback` mode, returns simulated loopback endpoints for `Peak MIDI 1` (`hw:3,0,0`),
+/// `UMC1820` (`hw:0,0,0`), and `nanoKONTROL2` (`hw:2,0,0`) without opening physical ports.
+pub fn discover_peak_hardware(safety_mode: MidiSafetyMode) -> PeakDiscoveryResult {
+    if safety_mode == MidiSafetyMode::VirtualLoopback {
+        return PeakDiscoveryResult {
+            peak: Some(AlsaPortEndpoint {
+                card_index: 3,
+                rawmidi_device: PEAK_ALSA_DEVICE.to_string(),
+                seq_client: Some(PEAK_SEQ_CLIENT),
+                seq_port: Some(0),
+                card_name: "Peak".to_string(),
+                device_type: SupportedDeviceType::NovationPeak,
+                is_virtual_mock: true,
+            }),
+            umc1820: Some(AlsaPortEndpoint {
+                card_index: 0,
+                rawmidi_device: UMC1820_ALSA_DEVICE.to_string(),
+                seq_client: Some(16),
+                seq_port: Some(0),
+                card_name: "UMC1820".to_string(),
+                device_type: SupportedDeviceType::BehringerUmc1820,
+                is_virtual_mock: true,
+            }),
+            nanokontrol2: Some(AlsaPortEndpoint {
+                card_index: 2,
+                rawmidi_device: NANOKONTROL2_ALSA_DEVICE.to_string(),
+                seq_client: Some(24),
+                seq_port: Some(0),
+                card_name: "nanoKONTROL2".to_string(),
+                device_type: SupportedDeviceType::KorgNanoKontrol2,
+                is_virtual_mock: true,
+            }),
+            total_devices_scanned: 3,
+            safety_mode: MidiSafetyMode::VirtualLoopback,
+        };
+    }
+
+    discover_peak_hardware_with_roots(
+        Path::new("/sys/class/sound"),
+        Path::new("/dev/snd/by-id"),
+        Path::new("/dev/snd/by-path"),
+        Path::new("/proc/asound/seq/clients"),
+        safety_mode,
+    )
+}
+
+/// Performs non-invasive ALSA port discovery for the Novation Peak with customizable filesystem roots.
+pub fn discover_peak_hardware_with_roots(
+    sys_class_sound: &Path,
+    dev_snd_by_id: &Path,
+    dev_snd_by_path: &Path,
+    proc_asound_seq_clients: &Path,
+    safety_mode: MidiSafetyMode,
+) -> PeakDiscoveryResult {
+    let devices = scan_hardware_devices_with_roots(
+        sys_class_sound,
+        dev_snd_by_id,
+        dev_snd_by_path,
+        proc_asound_seq_clients,
+    );
+
+    let mut peak_endpoint = None;
+    let mut umc_endpoint = None;
+    let mut nk2_endpoint = None;
+
+    for dev in &devices {
+        let ep = AlsaPortEndpoint {
+            card_index: dev.alsa_card_index,
+            rawmidi_device: format!("hw:{},0,0", dev.alsa_card_index),
+            seq_client: dev.alsa_seq_client,
+            seq_port: dev.alsa_seq_port,
+            card_name: dev.card_name.clone(),
+            device_type: dev.device_type,
+            is_virtual_mock: false,
+        };
+        match dev.device_type {
+            SupportedDeviceType::NovationPeak => peak_endpoint = Some(ep),
+            SupportedDeviceType::BehringerUmc1820 => umc_endpoint = Some(ep),
+            SupportedDeviceType::KorgNanoKontrol2 => nk2_endpoint = Some(ep),
+            _ => {}
+        }
+    }
+
+    PeakDiscoveryResult {
+        peak: peak_endpoint,
+        umc1820: umc_endpoint,
+        nanokontrol2: nk2_endpoint,
+        total_devices_scanned: devices.len(),
+        safety_mode,
+    }
+}
+
 // =============================================================================
 // Unit Tests
 // =============================================================================
@@ -1133,5 +1557,89 @@ mod tests {
             velocity: 0,
         };
         assert_eq!(note_off.to_bytes(), vec![0x80, 60, 0]);
+    }
+
+    #[test]
+    fn peak_midi_router_polyphony_safe_sweep_and_panic() {
+        let mut router = PeakMidiRouter::new().with_dual_cc_pairs(true);
+        assert_eq!(router.midi_channel, 1);
+        assert_eq!(router.wire_channel(), 0);
+        assert!(router.safety_mode.is_safe());
+
+        // Safe sweep clamps resonance (CC 79) to <= 62
+        let res_pkts = router.route_cc(79, "Filter resonance", 120);
+        assert_eq!(res_pkts.len(), 1);
+        assert_eq!(
+            res_pkts[0],
+            MidiPacket::ControlChange {
+                channel: 0,
+                cc: 79,
+                value: 62
+            }
+        );
+
+        // Dual CC pair on Cutoff (CC 29 -> 29 and 61)
+        let cutoff_pkts = router.route_cc(29, "Filter cutoff (Frequency)", 100);
+        assert_eq!(cutoff_pkts.len(), 2);
+        assert_eq!(
+            cutoff_pkts[0],
+            MidiPacket::ControlChange {
+                channel: 0,
+                cc: 29,
+                value: 100
+            }
+        );
+        assert_eq!(
+            cutoff_pkts[1],
+            MidiPacket::ControlChange {
+                channel: 0,
+                cc: 61,
+                value: 100
+            }
+        );
+
+        // 8-voice allocation + 9th voice steals oldest note (60)
+        for n in 60..68 {
+            let pkts = router.route_note_on(n, 100);
+            assert_eq!(pkts.len(), 1);
+        }
+        assert_eq!(router.active_voices.len(), 8);
+
+        let steal_pkts = router.route_note_on(72, 110);
+        assert_eq!(steal_pkts.len(), 2);
+        assert_eq!(
+            steal_pkts[0],
+            MidiPacket::NoteOff {
+                channel: 0,
+                note: 60,
+                velocity: 0
+            }
+        );
+        assert_eq!(
+            steal_pkts[1],
+            MidiPacket::NoteOn {
+                channel: 0,
+                note: 72,
+                velocity: 110
+            }
+        );
+        assert_eq!(router.active_voices.len(), 8);
+
+        // Panic emits CC 120, CC 123, and 128 NoteOffs (130 packets total)
+        let panic_pkts = router.route_panic();
+        assert_eq!(panic_pkts.len(), 130);
+        assert!(router.active_voices.is_empty());
+    }
+
+    #[test]
+    fn peak_alsa_port_discovery_virtual_loopback() {
+        let disc = discover_peak_hardware(MidiSafetyMode::VirtualLoopback);
+        assert!(disc.has_peak_usb());
+        assert!(disc.has_umc1820_din());
+        assert!(disc.has_controller());
+        let peak = disc.peak.unwrap();
+        assert_eq!(peak.rawmidi_device, "hw:3,0,0");
+        assert_eq!(peak.seq_client, Some(28));
+        assert!(peak.is_virtual_mock);
     }
 }

@@ -590,4 +590,68 @@ impl ParamDescriptor {
         self.is_locked = locked;
         self
     }
+
+    /// Returns the acoustic safe sweep bounds for this parameter based on its name.
+    pub fn safe_sweep_bounds(&self) -> SafeSweepBounds {
+        safe_sweep_range(&self.name)
+    }
+}
+
+/// Conservative acoustic sweep bounds for a 7-bit MIDI CC parameter (`0..=127`).
+///
+/// Matches `safeSweepRange(name)` in `js/konduktiva-peak/src/cc.js` so that
+/// resonance, analog distortion, filter overdrive/post-drive, delay feedback,
+/// and FX sends do not self-oscillate or blast at full volume during automated
+/// sweeps or randomization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SafeSweepBounds {
+    pub lo: u8,
+    pub hi: u8,
+}
+
+impl SafeSweepBounds {
+    /// Creates a new `SafeSweepBounds` pair (`lo..=hi`).
+    pub const fn new(lo: u8, hi: u8) -> Self {
+        Self { lo, hi }
+    }
+
+    /// Clamps a 7-bit MIDI CC value into `[lo, hi]`.
+    pub fn clamp(&self, value: u8) -> u8 {
+        value.clamp(self.lo, self.hi)
+    }
+
+    /// Clamps a floating-point parameter value into `[lo as f64, hi as f64]`.
+    pub fn clamp_f64(&self, value: f64) -> f64 {
+        value.clamp(self.lo as f64, self.hi as f64)
+    }
+}
+
+/// Computes the conservative safe sweep range for a parameter keyword or name.
+///
+/// Identical to `safeSweepRange(name)` in `js/konduktiva-peak/src/cc.js`:
+/// - `resonance` / `reso` -> `0..=62`
+/// - `distortion` -> `0..=48`
+/// - `overdrive` / `drive` -> `0..=50`
+/// - `feedback` -> `0..=70`
+/// - `reverb` / `delay` / `chorus` / `fx` -> `0..=90`
+/// - Everything else -> `0..=127`
+pub fn safe_sweep_range(name: &str) -> SafeSweepBounds {
+    let n = name.to_ascii_lowercase();
+    if n.contains("resonance") || n.contains("reso") {
+        SafeSweepBounds::new(0, 62)
+    } else if n.contains("distortion") {
+        SafeSweepBounds::new(0, 48)
+    } else if n.contains("overdrive") || n.contains("drive") {
+        SafeSweepBounds::new(0, 50)
+    } else if n.contains("feedback") {
+        SafeSweepBounds::new(0, 70)
+    } else if n.contains("reverb")
+        || n.contains("delay")
+        || n.contains("chorus")
+        || n.contains("fx")
+    {
+        SafeSweepBounds::new(0, 90)
+    } else {
+        SafeSweepBounds::new(0, 127)
+    }
 }

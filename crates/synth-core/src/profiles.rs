@@ -1088,6 +1088,191 @@ impl DeviceSynthesizerProfile {
 
         p
     }
+
+    /// Novation Peak 8-Voice Polyphonic Hybrid Synthesizer profile derived from
+    /// `js/konduktiva-peak/midi-cc-map.json` (`1235:007e`, factory default MIDI Channel 1).
+    ///
+    /// Covers all 74 7-bit MIDI Continuous Controller parameters across:
+    /// - System & Mod Wheel (CC 1)
+    /// - Voice & Glide (CC 5, 35)
+    /// - New Oxford NCO Oscillators 1, 2, 3 (CC 3, 9, 12, 14..22, 33, 34, 37..44, 65, 71..73, 119)
+    /// - Mixer with Ring Mod & Noise (CC 23..27)
+    /// - State-Variable OTA Analogue Filter with Pre/Post Drive (CC 28, 29, 36, 75, 76, 78, 79, 80)
+    /// - LFO 1 & LFO 2 with Sync & Fade (CC 30, 31, 81..85)
+    /// - Amp Envelope & Mod Envelopes 1 & 2 (CC 86..95, 103, 117)
+    /// - Analogue Distortion & Digital FX: Chorus, Delay, Reverb (CC 104, 105, 107..110, 112, 113, 118)
+    /// - Animate 1 & 2 Performance Hold Macros & Arpeggiator Gate (CC 114, 115, 116)
+    pub fn novation_peak() -> Self {
+        let mut p = Self::new(
+            "novation_peak",
+            "Novation Peak",
+            "Focusrite-Novation",
+            "2.1",
+            DeviceCategory::Synthesizer,
+        )
+        .with_default_channel(0); // 0-indexed wire channel 0 = MIDI Channel 1
+
+        p.add_tag("hybrid_polyphonic");
+        p.add_tag("8_voice");
+        p.add_tag("new_oxford_oscillators");
+        p.add_tag("ota_multimode_filter");
+        p.add_tag("konduktiva_companion");
+
+        let cc_entries: &[(u8, &str, &str, f64, &str)] = &[
+            (1, "System", "Mod wheel (modulation)", 0.0, ""),
+            (3, "Osc 1", "Osc 1 range", 64.0, "oct"),
+            (5, "Voice", "Glide time", 0.0, "ms"),
+            (9, "Osc 1", "Osc 1 mod 2 pitch", 64.0, ""),
+            (12, "Osc 1", "Osc 1 shape", 64.0, ""),
+            (14, "Osc 1", "Osc 1 coarse", 64.0, "st"),
+            (15, "Osc 1", "Osc 1 fine", 64.0, "cents"),
+            (16, "Osc 1", "Osc 1 LFO 2 pitch", 64.0, ""),
+            (17, "Osc 2", "Osc 2 coarse", 64.0, "st"),
+            (18, "Osc 2", "Osc 2 fine", 64.0, "cents"),
+            (19, "Osc 2", "Osc 2 LFO 2 pitch", 64.0, ""),
+            (20, "Osc 3", "Osc 3 coarse", 64.0, "st"),
+            (21, "Osc 3", "Osc 3 fine", 64.0, "cents"),
+            (22, "Osc 3", "Osc 3 LFO 2 pitch", 64.0, ""),
+            (23, "Mixer", "Osc 1 mix", 127.0, ""),
+            (24, "Mixer", "Osc 2 mix", 0.0, ""),
+            (25, "Mixer", "Osc 3 mix", 0.0, ""),
+            (26, "Mixer", "Ring mod mix", 0.0, ""),
+            (27, "Mixer", "Noise mix", 0.0, ""),
+            (28, "Filter", "LFO 1 -> filter depth", 64.0, ""),
+            (29, "Filter", "Filter cutoff (Frequency)", 100.0, "Hz"),
+            (30, "LFO 1", "LFO 1 rate", 64.0, "Hz"),
+            (31, "LFO 2", "LFO 2 rate", 64.0, "Hz"),
+            (33, "Osc 1", "Osc 1 LFO 1 shape", 64.0, ""),
+            (34, "Osc 1", "Osc 1 vsync", 0.0, ""),
+            (35, "Voice", "Glide on", 0.0, ""),
+            (36, "Filter", "Filter post drive", 0.0, "dB"),
+            (37, "Osc 2", "Osc 2 range", 64.0, "oct"),
+            (38, "Osc 2", "Osc 2 mod 2 pitch", 64.0, ""),
+            (39, "Osc 2", "Osc 2 shape", 64.0, ""),
+            (40, "Osc 2", "Osc 2 mod 1 shape", 64.0, ""),
+            (41, "Osc 2", "Osc 2 LFO 1 shape", 64.0, ""),
+            (42, "Osc 2", "Osc 2 vsync", 0.0, ""),
+            (43, "Osc 3", "Osc 3 mod 2 pitch", 64.0, ""),
+            (44, "Osc 3", "Osc 3 vsync", 0.0, ""),
+            (65, "Osc 3", "Osc 3 range", 64.0, "oct"),
+            (71, "Osc 3", "Osc 3 shape", 64.0, ""),
+            (72, "Osc 3", "Osc 3 mod 1 pitch", 64.0, ""),
+            (73, "Osc 3", "Osc 3 LFO 1 shape", 64.0, ""),
+            (75, "Filter", "Filter track", 64.0, "%"),
+            (76, "Filter", "Osc 3 -> filter", 64.0, ""),
+            (78, "Filter", "Mod 1 -> filter", 64.0, ""),
+            (79, "Filter", "Filter resonance", 16.0, ""),
+            (80, "Filter", "Filter overdrive", 0.0, "dB"),
+            (81, "LFO 1", "LFO 1 sync rate", 64.0, "div"),
+            (82, "LFO 1", "LFO 1 fade", 0.0, "ms"),
+            (83, "LFO 2", "LFO 2 range", 0.0, ""),
+            (84, "LFO 2", "LFO 2 sync rate", 64.0, "div"),
+            (85, "LFO 2", "LFO 2 fade", 0.0, "ms"),
+            (86, "Amp Env", "Amp envelope attack", 4.0, "ms"),
+            (87, "Amp Env", "Amp envelope decay", 64.0, "ms"),
+            (88, "Amp Env", "Amp envelope sustain", 100.0, "%"),
+            (89, "Amp Env", "Amp envelope release", 32.0, "ms"),
+            (90, "Mod Env 1", "Mod envelope 1 attack", 4.0, "ms"),
+            (91, "Mod Env 1", "Mod envelope 1 decay", 64.0, "ms"),
+            (92, "Mod Env 1", "Mod envelope 1 sustain", 64.0, "%"),
+            (93, "Mod Env 1", "Mod envelope 1 release", 32.0, "ms"),
+            (94, "Mod Env 2", "Mod envelope 2 attack", 4.0, "ms"),
+            (95, "Mod Env 2", "Mod envelope 2 decay", 64.0, "ms"),
+            (103, "Mod Env 2", "Mod envelope 2 release", 32.0, "ms"),
+            (104, "FX Distortion", "Distortion level", 0.0, "dB"),
+            (105, "FX Chorus", "Chorus level", 0.0, "%"),
+            (107, "FX Chorus", "Chorus feedback", 64.0, "%"),
+            (108, "FX Delay", "Delay level", 0.0, "%"),
+            (109, "FX Delay", "Delay time", 64.0, "ms"),
+            (110, "FX Delay", "Delay feedback", 32.0, "%"),
+            (112, "FX Reverb", "Reverb level", 0.0, "%"),
+            (113, "FX Reverb", "Reverb time", 64.0, "ms"),
+            (114, "Animate", "Animate 1 hold", 0.0, ""),
+            (115, "Animate", "Animate 2 hold", 0.0, ""),
+            (116, "Arp", "Arp clock gate", 64.0, "%"),
+            (117, "Mod Env 2", "Mod envelope 2 sustain", 64.0, "%"),
+            (118, "FX Chorus", "Chorus rate", 48.0, "Hz"),
+            (119, "Osc 1", "Osc 1 mod 1 shape", 64.0, ""),
+        ];
+
+        for &(cc, module, param_name, def_val, unit) in cc_entries {
+            let range = ValueRange::new(0.0, 127.0, def_val, 1.0, unit)
+                .unwrap_or_else(|_| ValueRange::midi_cc7(def_val));
+            let mut desc = ParamDescriptor::new(param_name, module, ParamAddress::cc7(cc), range);
+            if cc == 29 {
+                desc = desc.with_curve(ResponseCurve::Exponential);
+            } else if (86..=95).contains(&cc) || cc == 103 {
+                desc = desc.with_curve(ResponseCurve::Logarithmic);
+            }
+            p.add_parameter(desc);
+        }
+
+        // Physical Novation Peak Hardware Panel Controls
+        p.add_control(PhysicalControlDescriptor::new(
+            "cutoff_knob",
+            "Filter Frequency Rotary Dial",
+            ControlElementKind::RotaryKnob,
+            29,
+            "Filter",
+        ));
+        p.add_control(PhysicalControlDescriptor::new(
+            "resonance_knob",
+            "Filter Resonance Rotary Dial",
+            ControlElementKind::RotaryKnob,
+            79,
+            "Filter",
+        ));
+        p.add_control(
+            PhysicalControlDescriptor::new(
+                "animate_1_btn",
+                "Animate 1 Hold Button",
+                ControlElementKind::PushButton,
+                114,
+                "Performance",
+            )
+            .with_led(114),
+        );
+        p.add_control(
+            PhysicalControlDescriptor::new(
+                "animate_2_btn",
+                "Animate 2 Hold Button",
+                ControlElementKind::PushButton,
+                115,
+                "Performance",
+            )
+            .with_led(115),
+        );
+        p.add_control(PhysicalControlDescriptor::new(
+            "amp_attack_slider",
+            "Amp Env Attack Fader",
+            ControlElementKind::LinearSlider,
+            86,
+            "Envelopes",
+        ));
+        p.add_control(PhysicalControlDescriptor::new(
+            "amp_decay_slider",
+            "Amp Env Decay Fader",
+            ControlElementKind::LinearSlider,
+            87,
+            "Envelopes",
+        ));
+        p.add_control(PhysicalControlDescriptor::new(
+            "amp_sustain_slider",
+            "Amp Env Sustain Fader",
+            ControlElementKind::LinearSlider,
+            88,
+            "Envelopes",
+        ));
+        p.add_control(PhysicalControlDescriptor::new(
+            "amp_release_slider",
+            "Amp Env Release Fader",
+            ControlElementKind::LinearSlider,
+            89,
+            "Envelopes",
+        ));
+
+        p
+    }
 }
 
 // =============================================================================
@@ -1288,6 +1473,448 @@ impl ControllerSurfaceMapping {
         }
     }
 
+    /// 3-Bank Korg nanoKONTROL2 tactile surface mapping for the Novation Peak:
+    /// - Bank 1: Oscillators 1-3 & Mixer (Knobs = Osc 1-3 Coarse/Shape/VSyn/Detune; Sliders = Osc 1-3 Mix, Ring Mod, Noise, Glide, Mod Wheel, Arp Gate)
+    /// - Bank 2: State-Variable OTA Filter, Envelopes & LFOs (Knobs = Cutoff, Resonance, Overdrive, Post Drive, LFO 1/2 Rate & Depth; Sliders = Amp & Mod Env 1 ADSR)
+    /// - Bank 3: FX, Animate 1/2 Performance Hold & Konduktiva Live Companion (Knobs = Distortion, Chorus, Delay, Reverb; Sliders = 8 Konduktiva Player Lanes)
+    #[must_use]
+    pub fn nanokontrol2_novation_peak() -> Self {
+        let bank1_controls = vec![
+            SurfaceControlBinding {
+                hardware_cc: 16,
+                label: "Osc 1 Coarse".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_1_coarse".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 17,
+                label: "Osc 1 Shape".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_1_shape".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 18,
+                label: "Osc 2 Coarse".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_2_coarse".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 19,
+                label: "Osc 2 Shape".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_2_shape".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 20,
+                label: "Osc 3 Coarse".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_3_coarse".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 21,
+                label: "Osc 3 Shape".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_3_shape".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 22,
+                label: "Osc 1 VSync".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_1_vsync".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 23,
+                label: "Osc 2 VSync".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_2_vsync".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 0,
+                label: "Osc 1 Mix".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_1_mix".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 1,
+                label: "Osc 2 Mix".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_2_mix".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 2,
+                label: "Osc 3 Mix".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("osc_3_mix".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 3,
+                label: "Ring Mod Mix".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("ring_mod_mix".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 4,
+                label: "Noise Mix".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("noise_mix".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 5,
+                label: "Glide Time".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("glide_time".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 6,
+                label: "Mod Wheel".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("mod_wheel_modulation".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 7,
+                label: "Arp Gate".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("arp_clock_gate".to_string()),
+                led_feedback_cc: None,
+            },
+        ];
+
+        let bank2_controls = vec![
+            SurfaceControlBinding {
+                hardware_cc: 16,
+                label: "Filter Cutoff".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("filter_cutoff_frequency".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 17,
+                label: "Filter Resonance".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("filter_resonance".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 18,
+                label: "Filter Overdrive".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("filter_overdrive".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 19,
+                label: "Filter Post Drive".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("filter_post_drive".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 20,
+                label: "LFO 1 Rate".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("lfo_1_rate".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 21,
+                label: "LFO 1 -> Filter".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("lfo_1_filter_depth".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 22,
+                label: "LFO 2 Rate".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("lfo_2_rate".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 23,
+                label: "Mod 1 -> Filter".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("mod_1_filter".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 0,
+                label: "Amp Attack".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("amp_envelope_attack".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 1,
+                label: "Amp Decay".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("amp_envelope_decay".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 2,
+                label: "Amp Sustain".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("amp_envelope_sustain".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 3,
+                label: "Amp Release".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("amp_envelope_release".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 4,
+                label: "Mod 1 Attack".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("mod_envelope_1_attack".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 5,
+                label: "Mod 1 Decay".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("mod_envelope_1_decay".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 6,
+                label: "Mod 1 Sustain".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("mod_envelope_1_sustain".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 7,
+                label: "Mod 1 Release".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("mod_envelope_1_release".to_string()),
+                led_feedback_cc: None,
+            },
+        ];
+
+        let bank3_controls = vec![
+            SurfaceControlBinding {
+                hardware_cc: 16,
+                label: "Distortion Level".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("distortion_level".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 17,
+                label: "Chorus Level".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("chorus_level".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 18,
+                label: "Chorus Rate".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("chorus_rate".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 19,
+                label: "Chorus Feedback".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("chorus_feedback".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 20,
+                label: "Delay Level".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("delay_level".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 21,
+                label: "Delay Time".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("delay_time".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 22,
+                label: "Delay Feedback".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("delay_feedback".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 23,
+                label: "Reverb Level".to_string(),
+                action: "set_param".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("reverb_level".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 32,
+                label: "Animate 1 Hold".to_string(),
+                action: "animate_1_toggle".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("animate_1_hold".to_string()),
+                led_feedback_cc: Some(32),
+            },
+            SurfaceControlBinding {
+                hardware_cc: 33,
+                label: "Animate 2 Hold".to_string(),
+                action: "animate_2_toggle".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("animate_2_hold".to_string()),
+                led_feedback_cc: Some(33),
+            },
+            SurfaceControlBinding {
+                hardware_cc: 0,
+                label: "Konduktiva Bass Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_bass".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 1,
+                label: "Konduktiva Chords Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_chords".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 2,
+                label: "Konduktiva Lead Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_lead".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 3,
+                label: "Konduktiva Arp Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_arp".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 4,
+                label: "Konduktiva ccCutoff Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_ccCutoff".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 5,
+                label: "Konduktiva ccReso Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_ccReso".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 6,
+                label: "Konduktiva ccMod Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_ccMod".to_string()),
+                led_feedback_cc: None,
+            },
+            SurfaceControlBinding {
+                hardware_cc: 7,
+                label: "Konduktiva ccFx Rate".to_string(),
+                action: "konduktiva_player_rate".to_string(),
+                target_device: Some("novation_peak".to_string()),
+                target_param: Some("player_ccFx".to_string()),
+                led_feedback_cc: None,
+            },
+        ];
+
+        Self {
+            surface_name: "Korg nanoKONTROL2".to_string(),
+            version: "1.0.0".to_string(),
+            active_bank: 1,
+            banks: vec![
+                SurfaceBankMapping {
+                    bank_index: 1,
+                    name: "Novation Peak Oscillators & Mixer".to_string(),
+                    target_mode: "OscillatorsAndMixer".to_string(),
+                    controls: bank1_controls,
+                },
+                SurfaceBankMapping {
+                    bank_index: 2,
+                    name: "Novation Peak Filter, Envelopes & LFOs".to_string(),
+                    target_mode: "FilterEnvelopesLfos".to_string(),
+                    controls: bank2_controls,
+                },
+                SurfaceBankMapping {
+                    bank_index: 3,
+                    name: "Novation Peak FX, Animate & Konduktiva Live".to_string(),
+                    target_mode: "FxAnimateKonduktiva".to_string(),
+                    controls: bank3_controls,
+                },
+            ],
+        }
+    }
+
     pub fn to_json(&self) -> Result<String, SynthError> {
         serde_json::to_string_pretty(self).map_err(|e| SynthError::SerializationError(e.to_string()))
     }
@@ -1387,6 +2014,12 @@ pub fn export_all_schemas(dir: &std::path::Path) -> Result<(), std::io::Error> {
     }
     if let Ok(json) = serde_json::to_string_pretty(&ControllerSurfaceMapping::nanokontrol2_nord_drum_2()) {
         let _ = std::fs::write(dir.join("korg-nanokontrol2-nd2.mapping.json"), json);
+    }
+    if let Ok(json) = DeviceSynthesizerProfile::novation_peak().to_json() {
+        let _ = std::fs::write(dir.join("novation-peak.profile.json"), json);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&ControllerSurfaceMapping::nanokontrol2_novation_peak()) {
+        let _ = std::fs::write(dir.join("korg-nanokontrol2-peak.mapping.json"), json);
     }
     Ok(())
 }
@@ -1586,6 +2219,41 @@ mod tests {
     }
 
     #[test]
+    fn test_novation_peak_profile_and_nanokontrol2_mapping() {
+        let profile = DeviceSynthesizerProfile::novation_peak();
+        assert_eq!(profile.id, "novation_peak");
+        assert_eq!(profile.category, DeviceCategory::Synthesizer);
+        assert_eq!(profile.parameters.len(), 74);
+        assert_eq!(profile.controller_controls.len(), 8);
+
+        let cutoff = profile
+            .get_param("filter_cutoff_frequency")
+            .expect("Cutoff missing");
+        assert_eq!(cutoff.address, ParamAddress::cc7(29));
+        assert_eq!(cutoff.curve, ResponseCurve::Exponential);
+
+        let reso = profile.get_param("filter_resonance").expect("Resonance missing");
+        assert_eq!(reso.address, ParamAddress::cc7(79));
+        assert_eq!(reso.safe_sweep_bounds().hi, 62);
+
+        let dist = profile.get_param("distortion_level").expect("Distortion missing");
+        assert_eq!(dist.address, ParamAddress::cc7(104));
+        assert_eq!(dist.safe_sweep_bounds().hi, 48);
+
+        let anim1 = profile.get_param("animate_1_hold").expect("Animate 1 missing");
+        assert_eq!(anim1.address, ParamAddress::cc7(114));
+        let anim2 = profile.get_param("animate_2_hold").expect("Animate 2 missing");
+        assert_eq!(anim2.address, ParamAddress::cc7(115));
+
+        let mapping = ControllerSurfaceMapping::nanokontrol2_novation_peak();
+        assert_eq!(mapping.surface_name, "Korg nanoKONTROL2");
+        assert_eq!(mapping.banks.len(), 3);
+        assert_eq!(mapping.banks[0].controls.len(), 16);
+        assert_eq!(mapping.banks[1].controls.len(), 16);
+        assert_eq!(mapping.banks[2].controls.len(), 18);
+    }
+
+    #[test]
     fn test_json_schemas_and_validation() {
         let preset_schema = preset_json_schema();
         assert_eq!(preset_schema["title"], "SynthPatch");
@@ -1657,7 +2325,14 @@ mod tests {
         assert_eq!(nd2_restored.id, "clavia_nord_drum_2");
         assert_eq!(nd2_restored.parameters.len(), 202);
 
-        // Verify Schema Exporter writes all 9 files across all 4 projects
+        // 5. Novation Peak Profile (8-Voice Hybrid Polyphonic Synthesizer)
+        let peak = DeviceSynthesizerProfile::novation_peak();
+        let peak_json = peak.to_json().expect("Peak JSON serialize failed");
+        let peak_restored = validate_profile_json(&peak_json).expect("Peak JSON parse failed");
+        assert_eq!(peak_restored.id, "novation_peak");
+        assert_eq!(peak_restored.parameters.len(), 74);
+
+        // Verify Schema Exporter writes all 12 files across all 5 projects
         let temp_dir = std::env::temp_dir().join(format!("synth_core_schema_test_{}", uuid::Uuid::new_v4()));
         export_all_schemas(&temp_dir).expect("export_all_schemas failed");
 
@@ -1671,6 +2346,8 @@ mod tests {
         assert!(temp_dir.join("behringer-td3-md.profile.json").exists());
         assert!(temp_dir.join("clavia-nord-drum-2.profile.json").exists());
         assert!(temp_dir.join("korg-nanokontrol2-nd2.mapping.json").exists());
+        assert!(temp_dir.join("novation-peak.profile.json").exists());
+        assert!(temp_dir.join("korg-nanokontrol2-peak.mapping.json").exists());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

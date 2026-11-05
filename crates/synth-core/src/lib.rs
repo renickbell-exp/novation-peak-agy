@@ -21,8 +21,8 @@ pub use history::{
     BatchSetParamsCommand, CommandHistory, PatchCommand, ReplacePatchCommand, SetParamCommand,
 };
 pub use param::{
-    ParamAddress, ParamDescriptor, ParamId, ResponseCurve, SoftTakeoverMode, SoftTakeoverResult,
-    SoftTakeoverState, ValueRange,
+    safe_sweep_range, ParamAddress, ParamDescriptor, ParamId, ResponseCurve, SafeSweepBounds,
+    SoftTakeoverMode, SoftTakeoverResult, SoftTakeoverState, ValueRange,
 };
 pub use preset::{PatchMeta, PatchSysex, PresetLibrary, SortField, SynthPatch};
 pub use profiles::{
@@ -440,6 +440,45 @@ mod tests {
         assert_eq!(nd2.category, DeviceCategory::Synthesizer);
         assert_eq!(nd2.parameters.len(), 202); // 186 voice params (31 x 6) + 16 global kit params
         assert_eq!(nd2.controller_controls.len(), 8); // 6 channel buttons + main dial + trig button
+
+        // 5. Novation Peak
+        let peak = DeviceSynthesizerProfile::novation_peak();
+        assert_eq!(peak.id, "novation_peak");
+        assert_eq!(peak.category, DeviceCategory::Synthesizer);
+        assert_eq!(peak.parameters.len(), 74);
+        assert_eq!(peak.controller_controls.len(), 8);
+    }
+
+    #[test]
+    fn test_safe_sweep_bounds_parity_with_konduktiva_peak() {
+        assert_eq!(
+            safe_sweep_range("Filter resonance"),
+            SafeSweepBounds { lo: 0, hi: 62 }
+        );
+        assert_eq!(
+            safe_sweep_range("Distortion level"),
+            SafeSweepBounds { lo: 0, hi: 48 }
+        );
+        assert_eq!(
+            safe_sweep_range("Filter post-drive"),
+            SafeSweepBounds { lo: 0, hi: 50 }
+        );
+        assert_eq!(
+            safe_sweep_range("Delay feedback"),
+            SafeSweepBounds { lo: 0, hi: 70 }
+        );
+        assert_eq!(
+            safe_sweep_range("Chorus feedback"),
+            SafeSweepBounds { lo: 0, hi: 70 }
+        );
+        assert_eq!(
+            safe_sweep_range("Reverb level"),
+            SafeSweepBounds { lo: 0, hi: 90 }
+        );
+        assert_eq!(
+            safe_sweep_range("Filter cutoff"),
+            SafeSweepBounds { lo: 0, hi: 127 }
+        );
     }
 
     #[test]

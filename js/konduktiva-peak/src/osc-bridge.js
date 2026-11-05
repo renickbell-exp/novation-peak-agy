@@ -54,7 +54,7 @@ function createPeakOscBridge(opts) {
             const wire = Math.max(0, channel - 1);
             let clamped = Math.max(0, Math.min(127, Math.round(value)));
             if (enforceSafeSweeps && (cc === 79 || String(paramName).toLowerCase().includes('resonance'))) {
-                const [lo, hi] = safeSweepRange('Filter resonance');
+                const { lo, hi } = safeSweepRange('Filter resonance');
                 clamped = Math.max(lo, Math.min(hi, clamped));
             }
             stats.cc++;

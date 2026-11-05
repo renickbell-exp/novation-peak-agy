@@ -143,7 +143,7 @@ Raw speed and low token usage only matter if the finished software is thorough, 
 1. **Automated Test Depth**: How many unit, integration, and cross-language parity tests verify the code (`196` in `pigs` vs. `116` in `agy`).
 2. **Panic Safety (`inv:no-raw-panics`)**: Whether production Rust code contains raw `.unwrap()` or `.expect()` calls that could crash the synthesizer manager during a live performance (`0` `unwrap()` and `0` `expect()` in `pigs` across `20,457` production lines vs. `0` `unwrap()` and `1` `expect()` in `agy` across `13,552` production lines).
 3. **Seam-Tax (Glue-Code Overhead)**: How cleanly each application reuses `synth_core::SynthPatch`, `CommandHistory`, `PresetLibrary`, `PatchDiff`, `Randomizer`, and `SoftTakeoverState` without writing redundant wrapper structs.
-4. **Compiler & Linter Cleanliness**: Both workspaces compile with **`0` `rustc` warnings** on `cargo test --workspace`; under strict `cargo clippy --workspace --all-targets -- -D warnings`, `novation-peak-agy` has `1` minor lint (`clippy::into_iter_on_ref` in `src/gui.rs:455`) and `novation-peak-pigs` has `7` minor stylistic lints (`derivable_impls`, `needless_range_loop`, `needless_bool_assign`, `op_ref`, `for_kv_map`, `manual_range_contains`).
+4. **Compiler & Linter Cleanliness**: Both workspaces compile with **`0` `rustc` warnings** on `cargo test --workspace`; under strict `cargo clippy --workspace --all-targets - -D warnings`, `novation-peak-agy` has `1` minor lint (`clippy::into_iter_on_ref` in `src/gui.rs:455`) and `novation-peak-pigs` has `7` minor stylistic lints (`derivable_impls`, `needless_range_loop`, `needless_bool_assign`, `op_ref`, `for_kv_map`, `manual_range_contains`).
 5. **CLI Ergonomics (`--help`, `--verify-hardware`, `--dry-stress`, `--export-shared-schemas`)**: `novation-peak-pigs` supports all standard CLI flags including `-h` / `--help`, `--verify-hardware`, `--dry-stress`, `--export-shared-schemas`, `--audit-geometry`, and `--headless-server`; `novation-peak-agy` supports `--verify-hardware`, `--dry-stress`, `--export-schemas`, `--list-patches`, `--inspect-patch`, and `--headless-frames`, but returns `Error: Unrecognized CLI argument: --help` when invoked with `--help`.
 6. **Hardware MIDI Safety**: Both applications default strictly to `MidiSafetyMode::VirtualLoopback` (`live: false`), keeping the connected physical **Focusrite A.E Peak** (`hw:3,0,0`, client `28:0`) and **Behringer UMC1820** (`hw:0,0,0`, client `16:0`) completely silent during all automated test and CLI verification runs.
 
@@ -168,7 +168,71 @@ Raw speed and low token usage only matter if the finished software is thorough, 
 | **1,000-Event Polyphonic + 9-Lane CC Stress Bench** | 2s dry stress (`371` events) | **Deterministic 1,000-event bench (`19,779.9` events/sec, 8-voice steal & safety clamp check)** | **`pigs`** |
 | **CLI `--help` Flag Support** | Fails (`Unrecognized CLI argument: --help`) | **Full `-h` / `--help` usage output** | **`pigs`** |
 
-## Section 4: Pre-Flight & Mid-Run Discoveries and Permanent Fixes
+## Section 4: Deep-Dive Analysis  -  Why `PIGS` Used 8 Epochs vs. `AGY`'s 6 Epochs, the "Controller vs. Simulation" Planning Trap, and How to Fix It
+
+### Plain-Language Explanation: Why Fewer Epochs Alone Is Not Automatically a Win
+
+Simply cutting a project from 20 epochs down to 8 epochs is not a guaranteed win if some of those 8 epochs are doing **the wrong kind of work**. When we compared `agy`'s 6-epoch run (`42m 20s`, `955,368` non-cached tokens, `4,011` application Rust LOC) against `pigs`'s 8-epoch run (`70m 52s`, `4,409,538` non-cached tokens, `10,239` application Rust LOC), two critical questions emerged:
+
+1. **Why did `pigs` need 8 epochs when `agy` finished in 6 epochs?**
+2. **Why did each `pigs` epoch still consume 3.46x more non-cached tokens (`551k` vs. `159k`) and 7.4x more shell commands (`268` vs. `36` total `run_command` calls) than `agy`?**
+
+### Finding 1: The "Controller vs. DSP Simulation" Planning Trap (`Epoch 3` and `Epoch 4` in `PIGS`)
+
+We are building a **hardware controller, patch editor, librarian, and live-coding companion** for an external hardware synthesizer (the Novation Peak), **not** a software audio synthesizer that generates sound waves on the computer's CPU. The physical Novation Peak hardware already contains the 3 FPGA oscillators and analogue filter that make the sound; our desktop app only needs to store and edit the 74 MIDI CC / NRPN parameter values, send and receive SysEx patch dumps, map Korg `nanoKONTROL2` faders, draw 2D parameter preview curves in the GUI, and sequence MIDI/OSC events from `Konduktiva`.
+
+Look at where the 2-epoch difference (`8` vs. `6`) came from when we compare every `.rs` file in `novation-peak-agy/src/` against `novation-peak-pigs/src/`:
+
+| Phase | `agy` (6 Epochs, `4,011` App Rust LOC) | `pigs` (8 Epochs, `10,239` App Rust LOC) | Forensic Diagnosis |
+| :--- | :--- | :--- | :--- |
+| **Shared Profile & SysEx** | **Epoch 1**: `synth-core` profile + `src/params.rs` (`286L`) + `src/sysex.rs` (`301L`) | **Epoch 1**: `synth-core` profile (`NovationPeakProfile`) + `js/shared-synth-sdk` (`542k` tok, `562s`) | Equivalent controller scope |
+| **Hardware, Routing & OSC** | **Epoch 2**: `synth-midi-osc` + `src/midi.rs` (`368L`) | **Epoch 2**: `synth-midi-osc` + `src/midi.rs` (`263L`) + `src/hardware_verify.rs` (`416L`) (`638k` tok, `558s`) | Equivalent controller scope |
+| **Synthesis Domain & Librarian** | **Epoch 3 (1 Epoch)**: `src/mod_matrix.rs` (`472L`) + `src/librarian.rs` (`549L`), storing all 74 CCs directly in `synth_core::SynthPatch` | **Epochs 3, 4 & 5 (3 Epochs)**:<br>• **Epoch 3**: `src/peak_synth.rs` (`1,946L`, `427k` tok, `483s`)<br>• **Epoch 4**: `src/peak_mod_fx.rs` (`1,929L`, `303k` tok, `246s`)<br>• **Epoch 5**: `src/peak_librarian.rs` (`1,952L`, `355k` tok, `316s`) | **Wrong-Domain Work**: `pigs` spent 2 extra epochs (`729s`, `730k` tokens) writing `3,875` lines of software DSP simulation structs (`PeakSynthEngine`, `PeakModFxEngine`) for an external hardware synth |
+| **Theme, Vector Widgets & GUI** | **Epoch 4**: `synth-ui-theme` + `src/controller.rs` (`264L`) + `src/gui.rs` (`607L`) | **Epoch 6**: `synth-ui-theme` + `src/gui.rs` (`1,303L`) + `src/app.rs` (`514L`) (`954k` tok, `1,087s` incl. repair) | `pigs` had to bridge `gui.rs`/`app.rs` across 3 large custom domain modules (`peak_synth`, `peak_mod_fx`, `peak_librarian`) |
+| **Konduktiva & OSC Bridge** | **Epoch 5**: `src/konduktiva.rs` (`557L`) + `src/osc_bridge.rs` (`333L`) + JS bridge | **Epoch 7**: `src/konduktiva_bridge.rs` (`919L`) + `tests/cross_synth_parity.rs` (`370L`) (`549k` tok, `501s`) | Equivalent scope |
+| **CLI, Stress Bench & Audit** | **Epoch 6**: `src/main.rs` (`233L`) + `tests/e2e_workspace.rs` (`169L`) | **Epoch 8**: `src/stress_bench.rs` (`439L`) + `src/main.rs` (`280L`) + `README.md` (`642k` tok, `499s` incl. repair) | Equivalent scope (`pigs` added `--help` and 1,000-event stress bench) |
+
+**Why did `pigs` fall into the "DSP Simulation Trap" while `agy` did not?**
+
+1. **Keyword Conflation in `IntentDomains.js` (`AUDIO_DSP` & `SYNTHESIS` vs. `HARDWARE_CONTROLLER_LIBRARIAN`)**:
+   - In `src/intent/IntentDomains.js` (lines `362-381`), any prompt mentioning `"synthesizer"`, `"oscillator"`, `"wavetable"`, `"filter"`, `"adsr"`, `"lfo"`, `"reverb"`, or `"alsa"` automatically matched `AUDIO_DSP` (*"Real-Time Audio Signal Processing, Filters, Effects & Spectral Analysis"*) and `SYNTHESIS` (*"Sound Synthesis Engines, Oscillators, Envelopes, Modulation & Timbre Design"*).
+   - `IntentDomains.js` lacked a distinct **`HARDWARE_CONTROLLER_LIBRARIAN`** domain separating an **external MIDI/NRPN/SysEx hardware controller** from an **in-process software audio DSP engine**.
+2. **Component-Driven Decomposition Instead of Role-Driven Capability Subtraction**:
+   - `IntentEngine.planAutonomousApplicationEpochs()` mapped the hardware components of the Novation Peak into dedicated Rust modules (`src/peak_synth.rs` and `src/peak_mod_fx.rs` with `domain: "DSP_AUDIO"`), even though `crates/synth-core` (`NovationPeakProfile` + `SynthPatch`) had **already** defined all 74 CCs, +32 dual-CC pairs, and 14-bit NRPNs in Epoch 1.
+   - Because `SymbolicGateRunner` requires file mutation (`requireMutation: true`) on each epoch's target file, the sub-agent had to fill `src/peak_synth.rs` (`1,946L`) and `src/peak_mod_fx.rs` (`1,929L`) with software synthesis simulation structs (`PeakSynthEngine`, `PeakModFxEngine`, sample-by-sample ADSR and SVF evaluators), which then had to be read and bridged by every downstream epoch (`Epochs 5, 6, 7, 8`).
+
+### Finding 2: Four Execution Bottlenecks Inside `PIGS` Sub-Agent Turns (`268` vs. `36` Shell Commands)
+
+Inspecting the raw JSONL transcripts for all 10 `pigs` turns against `agy`'s single session (`7f124267`) explains the remaining token and time gap:
+
+1. **Stateless Sub-Agent Cold Starts Across Epochs (`10` Isolated Sessions vs. `1` Continuous Session)**:
+   - `agy` ran all 6 epochs in **1 continuous session (`353` steps)**, keeping `crates/synth-core`, `crates/synth-midi-osc`, `crates/synth-ui-theme`, and `js/konduktiva-peak` warm in its prompt cache across all 6 epochs (`105` `read_file` calls total).
+   - `pigs` spawned a **brand-new stateless sub-agent process (`--new-session`) for every epoch**. Each new sub-agent had to re-discover structs and functions written in earlier epochs (`292` `read_file` calls + dozens of `grep`/`sed` shell commands).
+2. **Duplicate Full-Workspace Test Runs & Report Compilations Inside Sub-Agents (`268` `run_command` Calls in `pigs` vs. `36` in `agy`)**:
+   - Because each `pigs` epoch prompt instructed the sub-agent to *"Ensure all workspace tests pass (`CARGO_BUILD_JOBS=2 cargo test --workspace` and `npm test`) and compile `reports/report-00k.md` with `build-report.sh --pdf`"*, each sub-agent ran:
+     - Baseline `cargo test --workspace` and `npm test` at the start of the turn before editing any code,
+     - Up to **7 full `cargo test --workspace` runs** during coding (e.g., 31 shell commands in Epoch 3; 39 shell commands in Epoch 6; 32 shell commands in Epoch 8), and
+     - Final `cargo test --workspace`, `npm test`, and `build-report.sh --pdf` at the end of the turn  -  right before `SymbolicGateRunner.runAllGates()` ran `ensureReportArtifacts()` (`build-report.sh --pdf`) and `runUnitTests()` (`cargo test --workspace` + `npm test`) **a second time**!
+   - Every `cargo test --workspace` run inside the sub-agent printed `150+` lines of test output into the sub-agent's conversation history, inflating `input_tokens` and `cache_read_tokens` on every subsequent step of the turn.
+3. **1-Line Structural Outlines on Large Files (`> 600` Lines) Triggering `grep` / `sed` Shell Exploration**:
+   - When files like `crates/synth-core/src/profiles.rs` (`2,434L`) or `src/peak_synth.rs` (`1,946L`) exceeded the 600-line limit of `extractTargetEntityInlineSource()`, `extractTargetEntityOutline()` only emitted `L123: pub struct Foo` without struct fields or function return types. Sub-agents compensated by running `grep -n "pub struct"` and `sed -n '1138,1330p'` via `run_command`.
+4. **Two Avoidable CEGIS Self-Repair Turns (`414s` and `430k` Non-Cached Tokens)**:
+   - **Epoch 6 Repair (`b2c7f2bc`, `278s`, `204k` tokens)**: `SymbolicGateRunner._scanForForbiddenImports()` flagged `pub use gui::{is_text_input_active, MainTab, RandomizerUiMode};` in `src/lib.rs` (`inv:clean-architecture`) because `lib.rs` (the crate root module manifest) was not exempted alongside `main.rs` and `app.rs`.
+   - **Epoch 8 Repair (`962e8d74`, `136s`, `226k` tokens)**: A single `.unwrap()` on a constant IP literal (`"127.0.0.1:0".parse().unwrap()`) in `src/main.rs:205` triggered a 92-step sub-agent turn (`33` shell commands) to replace one line.
+
+### Five Concrete Improvements Implemented in `pigsAndFishes`
+
+To eliminate wrong-domain planning work and close the remaining token/time gap with standalone `agy` while preserving `pigs`'s superior verification depth (`196` tests, `0` `unwrap()`/`expect()`, full `--help` CLI support, and headless geometry auditing), we designed and implemented five architectural upgrades in `pigsAndFishes`:
+
+| # | Improvement Area | Plain-Language Goal | Exact Technical Implementation in `pigsAndFishes` |
+| :--- | :--- | :--- | :--- |
+| **1** | **System Boundary & Role Classifier (`HARDWARE_CONTROLLER_LIBRARIAN` vs. `SOFTWARE_DSP_ENGINE`)** | Teach `pigs` the difference between building a remote control/librarian for external hardware vs. building a software audio synthesizer | Added `HARDWARE_CONTROLLER_LIBRARIAN` to `INTENT_DOMAIN_CATALOG` and `classifySystemBoundaryRole()` in `src/intent/IntentDomains.js` so controller/editor/librarian prompts suppress `AUDIO_DSP` software simulation goals |
+| **2** | **Workspace Capability Subtraction & 6-Epoch Controller Planner (`validatePlanAgainstRole`)** | Don't plan epochs for work that `synth-core` already does, and reject any plan that simulates hardware DSP in a controller app | Updated `IntentEngine.planAutonomousApplicationEpochs()` and added `IntentEngine.validatePlanAgainstRole()` in `src/intent/IntentEngine.js` to subtract existing `synth-core`/`synth-midi-osc`/`synth-ui-theme` capabilities, prune/merge redundant `DSP_AUDIO` simulation epochs into **6 lean controller epochs**, and inject `[SYSTEM BOUNDARY  -  CONTROLLER, NOT DSP SIMULATOR]` (`inv:controller-not-dsp-simulator`) |
+| **3** | **Rich Multi-Line Struct/Signature Outlines & Cross-Epoch Workspace API Digest** | Give each epoch sub-agent the exact struct fields and function signatures created in earlier epochs so it never needs `grep` or `sed` | Upgraded `extractTargetEntityOutline()` and added `extractWorkspaceApiDigest()` in `src/agy/AgyBridge.js` to include struct fields, enum variants, and full `pub fn (...) -> ...` signatures across `src/*.rs` and shared crates |
+| **4** | **Single-Pass Testing & Gate-Delegated Report Compilation** | Stop running `cargo test --workspace`, `npm test`, and `build-report.sh --pdf` repeatedly inside the sub-agent when `SymbolicGateRunner` runs them on exit | Updated `AgyBridge.buildCagedPrompt()` and `IntentEngine.planAutonomousApplicationEpochs()` to forbid start-of-turn baseline test runs, use fast `cargo check --quiet` / `cargo test --lib` during edits, and delegate `build-report.sh --pdf` + final full-workspace test verification to `SymbolicGateRunner.runAllGates()` |
+| **5** | **Crate-Root `src/lib.rs` Exemption, Pre-Gate `.unwrap()` Auto-Sanitizer & CLI `--help` Gate Check** | Eliminate false-positive `inv:clean-architecture` repairs on `src/lib.rs` re-exports, auto-fix trivial literal `.unwrap()` calls without spawning a 225k-token repair turn, and verify `--help` | Updated `_scanForForbiddenImports()` (`baseName === "lib.rs"` exemption) and added `_autoSanitizeTrivialUnwraps()` in `src/gates/SymbolicGateRunner.js` and `src/world-model/SoftwareWorldModel.js` |
+
+## Section 5: Pre-Flight & Mid-Run Discoveries and Permanent Fixes
 
 ### Plain-Language Explanation
 
@@ -183,11 +247,11 @@ Running a live benchmark with real external libraries (`~/claude/novation-peak/`
    - **Why it happened**: `SymbolicGateRunner.checkSyntax()` called `fs.readdirSync(scanDir, { recursive: true }).filter(f => !f.includes("node_modules"))` on `js/`. Because `fs.readdirSync(..., { recursive: true })` walks the entire directory tree in C++ *before* returning the array to `.filter(...)`, it entered `js/konduktiva-peak/node_modules`, where `/home/renick/claude/novation-peak/node_modules/konduktiva -> ../../konduktiva` and `/home/renick/claude/konduktiva/node_modules/konduktiva-form -> ../../konduktiva-form -> node_modules/konduktiva` formed a 2-hop circular symlink loop!
    - **Permanent Fix**: We replaced all 7 `fs.readdirSync(..., { recursive: true })` calls in `SymbolicGateRunner.js`, `SoftwareWorldModel.js`, and `ProjectExtractor.js` with `_walkRelativeFilesSafe()`, which skips `node_modules`, `target`, `dist`, `build`, `.git`, and symbolic links (`ent.isSymbolicLink()`) **before** recursing. After applying the fix, `SymbolicGateRunner.runAllGates()` completed all 4 verification gates on `novation-peak-pigs` in **6 seconds using only 11 MB of heap**, and `pigs` executed `Epoch 2 of 8` through `Epoch 8 of 8` non-stop without a single glitch.
 
-## Section 5: Verification and Test Summary
+## Section 6: Verification and Test Summary
 
 All automated test suites across `pigsAndFishes`, `novation-peak-pigs`, and `novation-peak-agy` were executed and verified prior to filing this report:
 
-- **`pigsAndFishes` Harness Suite (`npm test`)**: **`176 / 176` passing** (`0` failures) in `6.89s`.
+- **`pigsAndFishes` Harness Suite (`npm test`)**: **`177 / 177` passing** (`0` failures) in `6.67s`, including dedicated regression tests for `classifySystemBoundaryRole()`, `IntentEngine.validatePlanAgainstRole()` pruning `peak_synth.rs` and `peak_mod_fx.rs` into 6 lean controller epochs, multi-line struct/signature extraction in `AgyBridge.extractTargetEntityOutline()` and `extractWorkspaceApiDigest()`, root `src/lib.rs` `inv:clean-architecture` exemption, and `SymbolicGateRunner._autoSanitizeTrivialUnwraps()`.
 - **`novation-peak-pigs` Rust & Node.js Suites**:
   - `CARGO_BUILD_JOBS=2 cargo test --workspace`: **`168 / 168` passing** (`63` in `novation-peak-manager` lib + `9` in `tests/cross_synth_parity.rs` + `34` in `synth-core` + `33` in `synth-midi-osc` + `29` in `synth-ui-theme`), `0` warnings.
   - `npm test`: **`28 / 28` passing** (`20` checks in `js/konduktiva-peak/test/run.js` + `8` tests in `test/novation-peak-profile.test.js` and `test/baseline.test.js`).

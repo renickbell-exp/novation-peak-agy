@@ -2606,4 +2606,399 @@ mod tests {
         badges[0].toggle_mute();
         assert!(badges[0].is_muted);
     }
+
+    #[test]
+    fn peak_vector_widgets_geometry_and_state() {
+        let mut osc = WavetableOscillatorModel::new(1, 0.5, 0.25, 0);
+        assert_eq!(osc.osc_index, 1);
+        let frame = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(180.0, 60.0));
+        let wave_pts = osc.waveform_polyline(frame, 32);
+        assert_eq!(wave_pts.len(), 33);
+        osc.set_shape(0.8);
+        assert!((osc.shape - 0.8).abs() < 1e-4);
+
+        let svf = StateVariableFilterModel::new(0.65, 0.40, 0.20, 0.15);
+        let resp_pts = svf.frequency_response_polyline(frame, 32);
+        assert_eq!(resp_pts.len(), 33);
+        assert!(svf.is_within_safe_sweep());
+
+        let mut anim1 = AnimateHoldButtonModel::new(1, 114, false);
+        assert!(!anim1.held);
+        anim1.toggle();
+        assert!(anim1.held);
+        assert_eq!(anim1.midi_cc_value(), 127);
+
+        let mut voices = VoiceAllocationMeterModel::new();
+        voices.set_active_notes(&[60, 64, 67]);
+        assert_eq!(voices.active_count(), 3);
+        let slots = voices.voice_slot_rects(frame, 4.0);
+        assert_eq!(slots.len(), 8);
+    }
+}
+
+// =============================================================================
+// Novation Peak Custom Vector Widgets
+// =============================================================================
+
+/// Headless-testable vector model for a Novation Peak New Oxford Oscillator (NCO / Wavetable).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WavetableOscillatorModel {
+    /// 1-based oscillator number (`1..=3`).
+    pub osc_index: u8,
+    /// Normalized wave shape / wavetable position (`0.0..=1.0`, `CC 12` / `CC 39` / `CC 71`).
+    pub shape: f32,
+    /// Normalized virtual sync depth (`0.0..=1.0`, `CC 34` / `CC 42` / `CC 44`).
+    pub vsync: f32,
+    /// Coarse pitch offset in semitones (`-64..=+63`).
+    pub coarse_st: i32,
+}
+
+impl WavetableOscillatorModel {
+    /// Creates a new New Oxford Oscillator waveform model.
+    #[must_use]
+    pub fn new(osc_index: u8, shape: f32, vsync: f32, coarse_st: i32) -> Self {
+        Self {
+            osc_index: osc_index.clamp(1, 3),
+            shape: shape.clamp(0.0, 1.0),
+            vsync: vsync.clamp(0.0, 1.0),
+            coarse_st: coarse_st.clamp(-64, 63),
+        }
+    }
+
+    /// Updates the normalized wavetable shape (`0.0..=1.0`).
+    pub fn set_shape(&mut self, shape: f32) {
+        self.shape = shape.clamp(0.0, 1.0);
+    }
+
+    /// Evaluates the synthesized NCO waveform amplitude in `-1.0..=1.0` at phase `t` (`0.0..=1.0`).
+    #[must_use]
+    pub fn evaluate_wave(&self, t: f32) -> f32 {
+        let sync_mult = 1.0 + self.vsync * 3.0;
+        let phase = (t.clamp(0.0, 1.0) * sync_mult).fract();
+        let sine = (phase * std::f32::consts::TAU).sin();
+        let saw = 2.0 * phase - 1.0;
+        let pulse = if phase < (0.5 - 0.35 * (self.shape - 0.5)) {
+            1.0
+        } else {
+            -1.0
+        };
+        if self.shape < 0.5 {
+            let mix = self.shape * 2.0;
+            sine * (1.0 - mix) + saw * mix
+        } else {
+            let mix = (self.shape - 0.5) * 2.0;
+            saw * (1.0 - mix) + pulse * mix
+        }
+    }
+
+    /// Generates `steps + 1` polyline points inside `rect` representing the oscillator waveform.
+    #[must_use]
+    pub fn waveform_polyline(&self, rect: Rect, steps: usize) -> Vec<Pos2> {
+        let n = steps.max(8);
+        let pad = 4.0;
+        let w = (rect.width() - pad * 2.0).max(1.0);
+        let h = (rect.height() - pad * 2.0).max(1.0);
+        let mid_y = rect.center().y;
+        (0..=n)
+            .map(|i| {
+                let frac = i as f32 / n as f32;
+                let x = rect.left() + pad + frac * w;
+                let y = mid_y - self.evaluate_wave(frac) * (h * 0.42);
+                Pos2::new(x, y)
+            })
+            .collect()
+    }
+}
+
+/// Renders a `WavetableOscillatorModel` vector display inside an `egui::Ui`.
+pub fn wavetable_oscillator_widget(
+    ui: &mut Ui,
+    model: &WavetableOscillatorModel,
+    accent: Color32,
+    readout: Color32,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(190.0, 64.0), Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        painter.rect_filled(rect, Rounding::ZERO, Color32::from_rgb(16, 20, 26));
+        painter.rect_stroke(rect, Rounding::ZERO, Stroke::new(1.0, accent));
+        let pts = model.waveform_polyline(rect, 48);
+        painter.add(Shape::line(pts, Stroke::new(1.8, accent)));
+        painter.text(
+            rect.left_top() + Vec2::new(6.0, 4.0),
+            Align2::LEFT_TOP,
+            format!(
+                "OSC {} | SHP {:.0}% | VSYNC {:.0}%",
+                model.osc_index,
+                model.shape * 100.0,
+                model.vsync * 100.0
+            ),
+            FontId::monospace(10.0),
+            readout,
+        );
+    }
+    response
+}
+
+/// Headless-testable vector model for the Novation Peak Analog OTA State-Variable Filter.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StateVariableFilterModel {
+    /// Normalized cutoff frequency (`0.0..=1.0`, `CC 29`).
+    pub cutoff: f32,
+    /// Normalized filter resonance (`0.0..=1.0`, `CC 79`, safe sweep ceiling `62/127 ~= 0.488`).
+    pub resonance: f32,
+    /// Normalized pre-filter overdrive (`0.0..=1.0`, `CC 80`, safe sweep ceiling `50/127 ~= 0.394`).
+    pub overdrive: f32,
+    /// Normalized post-filter drive (`0.0..=1.0`, `CC 36`, safe sweep ceiling `50/127 ~= 0.394`).
+    pub post_drive: f32,
+}
+
+impl StateVariableFilterModel {
+    /// Creates a new state-variable filter response curve model.
+    #[must_use]
+    pub fn new(cutoff: f32, resonance: f32, overdrive: f32, post_drive: f32) -> Self {
+        Self {
+            cutoff: cutoff.clamp(0.0, 1.0),
+            resonance: resonance.clamp(0.0, 1.0),
+            overdrive: overdrive.clamp(0.0, 1.0),
+            post_drive: post_drive.clamp(0.0, 1.0),
+        }
+    }
+
+    /// Returns `true` if resonance (`<= 62/127`) and drive (`<= 50/127`) are within acoustic `SafeSweepBounds`.
+    #[must_use]
+    pub fn is_within_safe_sweep(&self) -> bool {
+        (self.resonance * 127.0).round() <= 62.0
+            && (self.overdrive * 127.0).round() <= 50.0
+            && (self.post_drive * 127.0).round() <= 50.0
+    }
+
+    /// Generates `steps + 1` polyline points inside `rect` representing the filter magnitude curve.
+    #[must_use]
+    pub fn frequency_response_polyline(&self, rect: Rect, steps: usize) -> Vec<Pos2> {
+        let n = steps.max(8);
+        let pad = 6.0;
+        let w = (rect.width() - pad * 2.0).max(1.0);
+        let h = (rect.height() - pad * 2.0).max(1.0);
+        let cutoff_x = self.cutoff.clamp(0.05, 0.95);
+
+        (0..=n)
+            .map(|i| {
+                let f = i as f32 / n as f32;
+                let passband = if f <= cutoff_x {
+                    0.55 + 0.15 * (self.overdrive + self.post_drive) * 0.5
+                } else {
+                    let roll = ((f - cutoff_x) / (1.0 - cutoff_x).max(0.05)).clamp(0.0, 1.0);
+                    (0.55 * (1.0 - roll).powi(2)).max(0.02)
+                };
+                let dist = ((f - cutoff_x) / 0.08).powi(2);
+                let res_peak = self.resonance * 0.42 * (-dist).exp();
+                let mag = (passband + res_peak).clamp(0.0, 1.0);
+                let x = rect.left() + pad + f * w;
+                let y = rect.bottom() - pad - mag * h;
+                Pos2::new(x, y)
+            })
+            .collect()
+    }
+}
+
+/// Renders a `StateVariableFilterModel` vector display inside an `egui::Ui`.
+pub fn state_variable_filter_widget(
+    ui: &mut Ui,
+    model: &StateVariableFilterModel,
+    accent: Color32,
+    readout: Color32,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(240.0, 72.0), Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        painter.rect_filled(rect, Rounding::ZERO, Color32::from_rgb(16, 20, 26));
+        painter.rect_stroke(rect, Rounding::ZERO, Stroke::new(1.0, accent));
+        let pts = model.frequency_response_polyline(rect, 48);
+        painter.add(Shape::line(pts, Stroke::new(2.0, accent)));
+        let badge = if model.is_within_safe_sweep() {
+            "SAFE SWEEP OK"
+        } else {
+            "HIGH RESO/DRIVE"
+        };
+        painter.text(
+            rect.left_top() + Vec2::new(6.0, 4.0),
+            Align2::LEFT_TOP,
+            format!(
+                "OTA SVF | CUT {:.0}% | RES {:.0}% | {}",
+                model.cutoff * 100.0,
+                model.resonance * 100.0,
+                badge
+            ),
+            FontId::monospace(10.0),
+            readout,
+        );
+    }
+    response
+}
+
+/// Headless-testable model for the Novation Peak Animate 1 (`CC 114`) and Animate 2 (`CC 115`) hold buttons.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnimateHoldButtonModel {
+    /// Button index (`1` or `2`).
+    pub animate_index: u8,
+    /// MIDI CC number (`114` for Animate 1, `115` for Animate 2).
+    pub cc_number: u8,
+    /// Whether the performance hold button is currently latched/held.
+    pub held: bool,
+}
+
+impl AnimateHoldButtonModel {
+    /// Creates a new `AnimateHoldButtonModel`.
+    #[must_use]
+    pub fn new(animate_index: u8, cc_number: u8, held: bool) -> Self {
+        Self {
+            animate_index: animate_index.clamp(1, 2),
+            cc_number,
+            held,
+        }
+    }
+
+    /// Toggles the held state and returns the new state.
+    pub fn toggle(&mut self) -> bool {
+        self.held = !self.held;
+        self.held
+    }
+
+    /// Returns the 7-bit MIDI CC value (`127` when held, `0` when released).
+    #[must_use]
+    pub const fn midi_cc_value(&self) -> u8 {
+        if self.held {
+            127
+        } else {
+            0
+        }
+    }
+}
+
+/// Renders an interactive `AnimateHoldButtonModel` inside an `egui::Ui`.
+pub fn animate_hold_button_widget(
+    ui: &mut Ui,
+    model: &mut AnimateHoldButtonModel,
+    accent: Color32,
+    readout: Color32,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(128.0, 30.0), Sense::click());
+    if response.clicked() {
+        model.toggle();
+    }
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let fill = if model.held {
+            accent
+        } else {
+            Color32::from_rgb(24, 28, 36)
+        };
+        let text_col = if model.held {
+            Color32::WHITE
+        } else {
+            readout
+        };
+        painter.rect_filled(rect, Rounding::ZERO, fill);
+        painter.rect_stroke(rect, Rounding::ZERO, Stroke::new(1.0, accent));
+        painter.text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            format!(
+                "ANIMATE {} (CC {}) [{}]",
+                model.animate_index,
+                model.cc_number,
+                if model.held { "ON" } else { "OFF" }
+            ),
+            FontId::monospace(10.5),
+            text_col,
+        );
+    }
+    response
+}
+
+/// Headless-testable model for the Novation Peak 8-Voice Polyphonic Allocation Meter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoiceAllocationMeterModel {
+    /// Active MIDI note (`0..=127`) per hardware voice slot (`0..8`), or `None` if idle.
+    pub voices: [Option<u8>; 8],
+}
+
+impl Default for VoiceAllocationMeterModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VoiceAllocationMeterModel {
+    /// Creates an idle 8-voice meter.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { voices: [None; 8] }
+    }
+
+    /// Synchronizes the 8 voice slots from a slice of active MIDI notes.
+    pub fn set_active_notes(&mut self, notes: &[u8]) {
+        self.voices = [None; 8];
+        for (idx, &note) in notes.iter().take(8).enumerate() {
+            self.voices[idx] = Some(note & 0x7F);
+        }
+    }
+
+    /// Returns the number of currently active voices (`0..=8`).
+    #[must_use]
+    pub fn active_count(&self) -> usize {
+        self.voices.iter().filter(|v| v.is_some()).count()
+    }
+
+    /// Computes 8 equally spaced bounding rectangles inside `total_rect`.
+    #[must_use]
+    pub fn voice_slot_rects(&self, total_rect: Rect, gap: f32) -> [Rect; 8] {
+        let total_gap = gap * 7.0;
+        let slot_w = ((total_rect.width() - total_gap) / 8.0).max(4.0);
+        std::array::from_fn(|i| {
+            let x = total_rect.left() + i as f32 * (slot_w + gap);
+            Rect::from_min_size(Pos2::new(x, total_rect.top()), Vec2::new(slot_w, total_rect.height()))
+        })
+    }
+}
+
+/// Renders a `VoiceAllocationMeterModel` 8-voice LED bar inside an `egui::Ui`.
+pub fn voice_allocation_meter_widget(
+    ui: &mut Ui,
+    model: &VoiceAllocationMeterModel,
+    accent: Color32,
+    readout: Color32,
+) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(260.0, 24.0), Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let slots = model.voice_slot_rects(rect, 4.0);
+        for (i, slot_rect) in slots.iter().enumerate() {
+            let active_note = model.voices[i];
+            let fill = if active_note.is_some() {
+                accent
+            } else {
+                Color32::from_rgb(22, 26, 32)
+            };
+            painter.rect_filled(*slot_rect, Rounding::ZERO, fill);
+            painter.rect_stroke(*slot_rect, Rounding::ZERO, Stroke::new(1.0, accent));
+            let label = match active_note {
+                Some(n) => format!("V{}:{}", i + 1, n),
+                None => format!("V{}", i + 1),
+            };
+            painter.text(
+                slot_rect.center(),
+                Align2::CENTER_CENTER,
+                label,
+                FontId::monospace(9.0),
+                if active_note.is_some() {
+                    Color32::WHITE
+                } else {
+                    readout
+                },
+            );
+        }
+    }
+    response
 }

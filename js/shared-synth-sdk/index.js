@@ -10,6 +10,7 @@ import { SharedSynthClient } from './synth-client.js';
 export const SynthClient = SharedSynthClient;
 export * from './nord-drum-router.js';
 export * from './nord-drum-sysex.js';
+export * from './novation-peak-router.js';
 export * from './schema-validator.js';
 
 /**
@@ -52,7 +53,7 @@ export const TWO_BOWLS_BACKGROUNDS = [
 ];
 
 /**
- * 7 Synth and editor accent profiles.
+ * 8 Synth and editor accent profiles across all 5 synthesizer workstations.
  */
 export const ACCENT_PROFILES = [
   'Midnight',
@@ -62,6 +63,7 @@ export const ACCENT_PROFILES = [
   'BassStationBlue',
   'AcidYellowTD3',
   'NordCrimson',
+  'PeakOxfordBlue',
 ];
 
 /**
@@ -73,6 +75,16 @@ export const NORD_CRIMSON_HEX = '#E52521';
  * Clavia Nord Drum 2 hardware high-contrast amber LED readout hex (#FFB300).
  */
 export const NORD_AMBER_LED_HEX = '#FFB300';
+
+/**
+ * Novation Peak Oxford Blue aluminum chassis accent hex (#1A73E8).
+ */
+export const PEAK_OXFORD_BLUE_HEX = '#1A73E8';
+
+/**
+ * Novation Peak warm OLED amber readout hex (#FF8C00).
+ */
+export const PEAK_AMBER_OLED_HEX = '#FF8C00';
 
 /**
  * 5 TD-3 Acid pattern styles.

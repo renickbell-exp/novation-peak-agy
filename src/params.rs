@@ -146,6 +146,35 @@ impl PeakMidiCcMapSpec {
     }
 }
 
+/// Resolved 5-parameter CC set used by the Konduktiva Peak companion and stress test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeakCoreCcSet {
+    pub cutoff: u8,
+    pub reso: u8,
+    pub mod_wheel: u8,
+    pub reverb: u8,
+    pub delay: u8,
+}
+
+/// Resolves a parameter name or keyword to its Novation Peak CC number (`0..=127`).
+#[must_use]
+pub fn resolve_cc(query: &str) -> Option<u8> {
+    PeakMidiCcMapSpec::load_embedded().resolve_cc(query)
+}
+
+/// Resolves the canonical 5-CC stress-test set (`cutoff=29`, `reso=79`, `mod_wheel=1`, `reverb=112`, `delay=108`).
+#[must_use]
+pub fn build_cc_set() -> PeakCoreCcSet {
+    let spec = PeakMidiCcMapSpec::load_embedded();
+    PeakCoreCcSet {
+        cutoff: spec.resolve_cc("cutoff").unwrap_or(29),
+        reso: spec.resolve_cc("resonance").unwrap_or(79),
+        mod_wheel: spec.resolve_cc("mod wheel").unwrap_or(1),
+        reverb: spec.resolve_cc("reverb level").unwrap_or(112),
+        delay: spec.resolve_cc("delay level").unwrap_or(108),
+    }
+}
+
 /// Returns the paired CC (`cc + 32` or `cc - 32`) for Peak parameters that use dual-CC pairs
 /// on hardware firmware (`23/55`, `24/56`, `25/57`, `29/61`, `30/62`, `31/63`).
 pub fn dual_cc_pair(cc: u8) -> Option<u8> {

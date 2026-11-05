@@ -74,6 +74,7 @@ export class SharedSynthClient extends EventEmitter {
       devices: [],
       bs2Params: {},
       td3Params: {},
+      peakParams: {},
       td3Steps: createDefaultTd3Steps(),
     };
   }
@@ -589,6 +590,109 @@ export class SharedSynthClient extends EventEmitter {
   }
 
   // ---------------------------------------------------------------------------
+  // Novation Peak 8-Voice Polyphonic Hybrid Synthesizer Control
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Sets a Novation Peak parameter by normalized ID or CC name.
+   * @param {string} paramName
+   * @param {number} value
+   * @returns {Promise<number>}
+   */
+  async setPeakParam(paramName, value) {
+    return this.send(`/synth/peak/param/${paramName}`, [oscFloat(value)]);
+  }
+
+  /**
+   * Sends a 7-bit MIDI CC message to the Novation Peak.
+   * @param {number} cc
+   * @param {number} value
+   * @returns {Promise<number>}
+   */
+  async sendPeakCc(cc, value) {
+    return this.send('/synth/peak/cc', [oscInt(cc), oscInt(value)]);
+  }
+
+  /**
+   * Sends a 14-bit NRPN message to the Novation Peak.
+   * @param {number} param14Bit
+   * @param {number} value14Bit
+   * @returns {Promise<number>}
+   */
+  async sendPeakNrpn(param14Bit, value14Bit) {
+    return this.send('/synth/peak/nrpn', [oscInt(param14Bit), oscInt(value14Bit)]);
+  }
+
+  /**
+   * Triggers a polyphonic Note-On on the Novation Peak.
+   * @param {number} note
+   * @param {number} [velocity=100]
+   * @returns {Promise<number>}
+   */
+  async sendPeakNoteOn(note, velocity = 100) {
+    return this.send('/synth/peak/note/on', [oscInt(note), oscInt(velocity)]);
+  }
+
+  /**
+   * Releases a polyphonic Note-Off on the Novation Peak.
+   * @param {number} note
+   * @param {number} [velocity=0]
+   * @returns {Promise<number>}
+   */
+  async sendPeakNoteOff(note, velocity = 0) {
+    return this.send('/synth/peak/note/off', [oscInt(note), oscInt(velocity)]);
+  }
+
+  /**
+   * Toggles Animate 1 (index=1, CC 114) or Animate 2 (index=2, CC 115) hold on the Novation Peak.
+   * @param {number} animateIndex
+   * @param {boolean} held
+   * @returns {Promise<number>}
+   */
+  async setPeakAnimate(animateIndex, held) {
+    return this.send('/synth/peak/animate', [oscInt(animateIndex), oscInt(held ? 1 : 0)]);
+  }
+
+  /**
+   * Loads a patch slot across Banks A..D on the Novation Peak.
+   * @param {'A'|'B'|'C'|'D'} bank
+   * @param {number} slot
+   * @returns {Promise<number>}
+   */
+  async loadPeakPatch(bank, slot) {
+    return this.send('/synth/peak/patch/load', [oscString(String(bank)), oscInt(slot)]);
+  }
+
+  /**
+   * Switches the active Konduktiva density graph ('peakHold' or 'peakBuild').
+   * @param {'peakHold'|'peakBuild'} graphName
+   * @returns {Promise<number>}
+   */
+  async setPeakDensityGraph(graphName) {
+    return this.send('/synth/konduktiva/density_graph', [oscString(String(graphName))]);
+  }
+
+  /**
+   * Updates a Peak Konduktiva player's onset rate on the peakGrid ladder.
+   * @param {string} playerName
+   * @param {number} rate
+   * @returns {Promise<number>}
+   */
+  async setPeakPlayerRate(playerName, rate) {
+    return this.send('/synth/konduktiva/player_rate', [oscString(String(playerName)), oscFloat(rate)]);
+  }
+
+  /**
+   * Starts or stops a Peak Konduktiva player.
+   * @param {string} playerName
+   * @param {boolean} playing
+   * @returns {Promise<number>}
+   */
+  async setPeakPlayerState(playerName, playing) {
+    return this.send('/synth/konduktiva/player_state', [oscString(String(playerName)), oscInt(playing ? 1 : 0)]);
+  }
+
+  // ---------------------------------------------------------------------------
   // Inbound Packet Parsing & Event Dispatch
   // ---------------------------------------------------------------------------
 
@@ -694,6 +798,8 @@ export class SharedSynthClient extends EventEmitter {
           this.state.bs2Params[paramName] = value;
         } else if (device === 'td3') {
           this.state.td3Params[paramName] = value;
+        } else if (device === 'peak') {
+          this.state.peakParams[paramName] = value;
         }
         this.emit('param', { device, param: paramName, value });
         return;

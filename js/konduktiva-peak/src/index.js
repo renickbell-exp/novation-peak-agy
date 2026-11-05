@@ -22,6 +22,7 @@ const output = require('./output');
 const { makeSweeps } = require('./sweeps');
 const playersFactory = require('./players');
 const { makeStress } = require('./stress-test');
+const { createPeakOscBridge } = require('./osc-bridge');
 
 /**
  * Build a kit bound to a host konduktiva module. Everything that constructs
@@ -76,6 +77,7 @@ function createPeakKit(K) {
 module.exports = {
     // factory
     createPeakKit,
+    createPeakOscBridge,
     // PURE helpers (no konduktiva needed)
     loadCcMap: cc.loadCcMap,
     resolveCc: cc.resolveCc,

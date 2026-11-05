@@ -349,6 +349,81 @@ export const NORD_DRUM_2_PROFILE = Object.freeze({
   tags: ['percussion', 'drum-synthesizer', 'nord-drum-2'],
 });
 
+export const NOVATION_PEAK_PROFILE = Object.freeze({
+  id: 'novation_peak',
+  name: 'Novation Peak',
+  manufacturer: 'Focusrite / Novation',
+  version: '2.1.0',
+  category: 'synthesizer',
+  default_midi_channel: 0,
+  modules: [
+    'Osc1',
+    'Osc2',
+    'Osc3',
+    'Mixer',
+    'Filter',
+    'EnvAmp',
+    'EnvMod',
+    'Lfo1',
+    'Lfo2',
+    'ArpVoice',
+    'Effects',
+    'ModMatrix',
+  ],
+  parameters: [
+    {
+      id: 'filter_cutoff_frequency',
+      name: 'Filter cutoff (Frequency)',
+      module: 'Filter',
+      address: { kind: 'Cc', cc: 29 },
+      range: { min: 0.0, max: 127.0, step: 1.0, default_value: 96.0 },
+      curve: 'Logarithmic',
+      is_locked: false,
+    },
+    {
+      id: 'filter_resonance',
+      name: 'Filter resonance',
+      module: 'Filter',
+      address: { kind: 'Cc', cc: 79 },
+      range: { min: 0.0, max: 127.0, step: 1.0, default_value: 20.0 },
+      curve: 'Linear',
+      is_locked: false,
+    },
+    {
+      id: 'mod_wheel_modulation',
+      name: 'Mod wheel (modulation)',
+      module: 'ArpVoice',
+      address: { kind: 'Cc', cc: 1 },
+      range: { min: 0.0, max: 127.0, step: 1.0, default_value: 0.0 },
+      curve: 'Linear',
+      is_locked: false,
+    },
+    {
+      id: 'reverb_level',
+      name: 'Reverb level',
+      module: 'Effects',
+      address: { kind: 'Cc', cc: 112 },
+      range: { min: 0.0, max: 127.0, step: 1.0, default_value: 32.0 },
+      curve: 'Linear',
+      is_locked: false,
+    },
+    {
+      id: 'delay_level',
+      name: 'Delay level',
+      module: 'Effects',
+      address: { kind: 'Cc', cc: 108 },
+      range: { min: 0.0, max: 127.0, step: 1.0, default_value: 24.0 },
+      curve: 'Linear',
+      is_locked: false,
+    },
+  ],
+  controller_controls: [
+    { id: 'animate_1', name: 'Animate 1 Hold', kind: 'Button', cc: 114, channel: 0, has_led: true, led_cc: 114, track_index: 0, group: 'performance' },
+    { id: 'animate_2', name: 'Animate 2 Hold', kind: 'Button', cc: 115, channel: 0, has_led: true, led_cc: 115, track_index: 1, group: 'performance' },
+  ],
+  tags: ['hybrid', 'polyphonic', 'fpga-oxford-oscillators', 'novation-peak'],
+});
+
 // =============================================================================
 // Canonical Themes across 4 Synthesizer Projects
 // =============================================================================
@@ -385,6 +460,15 @@ export const NORD_DRUM_2_THEME = Object.freeze({
   two_bowls_bg: 'WarmPaper',
   accent: 'NordCrimson',
   overrides: { accent: '#E52521', panel: '#1C1616', led_readout: '#FFB300' },
+  scale: 1.0,
+  true_black_and_white: false,
+});
+
+export const NOVATION_PEAK_THEME = Object.freeze({
+  preference: 'SolarizedDark',
+  two_bowls_bg: 'SlateStudio',
+  accent: 'PeakOxfordBlue',
+  overrides: { accent: '#1A73E8', panel: '#121822', led_readout: '#FF8C00' },
   scale: 1.0,
   true_black_and_white: false,
 });
@@ -491,9 +575,11 @@ export function exportAllSchemas(outputDir) {
   fs.writeFileSync(path.join(outputDir, 'novation-bass-station-2.profile.json'), JSON.stringify(NOVATION_BS2_PROFILE, null, 2));
   fs.writeFileSync(path.join(outputDir, 'behringer-td3-md.profile.json'), JSON.stringify(BEHRINGER_TD3_PROFILE, null, 2));
   fs.writeFileSync(path.join(outputDir, 'clavia-nord-drum-2.profile.json'), JSON.stringify(NORD_DRUM_2_PROFILE, null, 2));
+  fs.writeFileSync(path.join(outputDir, 'novation-peak.profile.json'), JSON.stringify(NOVATION_PEAK_PROFILE, null, 2));
 
   fs.writeFileSync(path.join(outputDir, 'asm-hydrasynth.theme.json'), JSON.stringify(ASM_HYDRASYNTH_THEME, null, 2));
   fs.writeFileSync(path.join(outputDir, 'nkeditor.theme.json'), JSON.stringify(NKEDITOR_THEME, null, 2));
   fs.writeFileSync(path.join(outputDir, 'bs2-td3.theme.json'), JSON.stringify(BS2_TD3_THEME, null, 2));
   fs.writeFileSync(path.join(outputDir, 'clavia-nord-drum-2.theme.json'), JSON.stringify(NORD_DRUM_2_THEME, null, 2));
+  fs.writeFileSync(path.join(outputDir, 'novation-peak.theme.json'), JSON.stringify(NOVATION_PEAK_THEME, null, 2));
 }

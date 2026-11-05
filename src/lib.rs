@@ -5,9 +5,11 @@
 
 pub mod controller;
 pub mod gui;
+pub mod konduktiva;
 pub mod librarian;
 pub mod midi;
 pub mod mod_matrix;
+pub mod osc_bridge;
 pub mod params;
 pub mod sysex;
 

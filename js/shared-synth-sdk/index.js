@@ -6,6 +6,8 @@
 
 export * from './osc-codec.js';
 export * from './synth-client.js';
+import { SharedSynthClient } from './synth-client.js';
+export const SynthClient = SharedSynthClient;
 export * from './nord-drum-router.js';
 export * from './nord-drum-sysex.js';
 export * from './schema-validator.js';

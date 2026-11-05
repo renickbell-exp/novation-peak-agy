@@ -81,6 +81,13 @@ function makePlayers(K, sweeps) {
         if (env.densityGraphs === undefined) env.densityGraphs = {};
         if (!Array.isArray(env.currentDensityGraphs)) env.currentDensityGraphs = [];
         if (!env.modeMaps.peakPass) env.modeMaps.peakPass = new QuantizedMap(1, [0], ['__pass__']);
+        if (!env.modeFilters.__pass__) {
+            env.modeFilters.__pass__ = new QuantizedMap(
+                12,
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+            );
+        }
         if (!env.legatoMaps.peak) env.legatoMaps.peak = new QuantizedMap(1, [0], [0.9]);
         if (!env.maxPolyphonyMaps.peak8) env.maxPolyphonyMaps.peak8 = new QuantizedMap(1, [0], [8]);
         if (!env.maskMaps.default) env.maskMaps.default = new QuantizedMap(4, [0], [false]);

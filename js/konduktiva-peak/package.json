@@ -1,0 +1,39 @@
+{
+  "name": "konduktiva-peak",
+  "version": "0.1.1",
+  "description": "Reusable Novation Peak MIDI driver for Konduktiva: CC sweeps, note voices, and a stress-test harness, bound to any host konduktiva via dependency injection.",
+  "main": "src/index.js",
+  "license": "GPL-3.0",
+  "author": "Renick Bell",
+  "files": [
+    "src",
+    "midi-cc-map.json",
+    "README.md",
+    "sources.md"
+  ],
+  "scripts": {
+    "test": "node test/run.js",
+    "stress:peak": "node examples/stress-120.js --live",
+    "stress:peak:dry": "node examples/stress-120.js --dry"
+  },
+  "peerDependencies": {
+    "konduktiva": ">=4.0.0-alpha"
+  },
+  "dependencies": {
+    "easymidi": "^3.1.0"
+  },
+  "keywords": [
+    "konduktiva",
+    "novation",
+    "peak",
+    "midi",
+    "live-coding",
+    "cc"
+  ],
+  "devDependencies": {
+    "konduktiva": "file:../konduktiva"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

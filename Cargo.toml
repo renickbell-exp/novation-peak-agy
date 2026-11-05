@@ -1,0 +1,36 @@
+[workspace]
+members = [
+    "crates/synth-core",
+    "crates/synth-midi-osc",
+    "crates/synth-ui-theme",
+    ".",
+]
+resolver = "2"
+
+[package]
+name = "novation-peak-manager"
+version = "0.1.0"
+edition = "2021"
+authors = ["Renick Bell <renick@gmail.com>"]
+description = "Novation Peak 8-Voice Polyphonic Hybrid Synthesizer Manager, Patch Librarian & Konduktiva Companion"
+default-run = "novation-peak-manager"
+
+[lib]
+name = "novation_peak_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "novation-peak-manager"
+path = "src/main.rs"
+
+[dependencies]
+synth-core = { path = "crates/synth-core" }
+synth-midi-osc = { path = "crates/synth-midi-osc" }
+synth-ui-theme = { path = "crates/synth-ui-theme" }
+egui = "0.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+rosc = "0.10"
+rand = "0.8"
+uuid = { version = "1.10", features = ["v4", "serde"] }

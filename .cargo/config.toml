@@ -1,0 +1,3 @@
+[build]
+jobs = 2
+target-dir = "/mnt/external-1/renick/dev/novation-peak-agy-target"

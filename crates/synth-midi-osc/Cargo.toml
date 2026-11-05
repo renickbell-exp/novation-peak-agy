@@ -1,0 +1,13 @@
+[package]
+name = "synth-midi-osc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Renick Bell <renick@gmail.com>"]
+description = "Shared Linux USB/ALSA hardware identity fingerprinting, multi-device manager, and OSC router"
+
+[dependencies]
+synth-core = { path = "../synth-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rosc = "0.10"
+

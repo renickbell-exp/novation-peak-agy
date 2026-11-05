@@ -1,0 +1,9 @@
+{
+  "name": "novation-peak-agy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Novation Peak Manager & Konduktiva Companion Workspace",
+  "scripts": {
+    "test": "STRESS_SECONDS=2 node js/konduktiva-peak/test/run.js && node --test test/*.test.js"
+  }
+}
